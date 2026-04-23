@@ -1068,6 +1068,135 @@ function buildGCalEvents() {
 
 // ── WEEKLY REVIEW ─────────────────────────────────────────────────────────
 // Simulate realistic data for the past 7 days
+// ── HABIT COMPLETION GRID 7×4 ─────────────────────────────────────────────
+// Renders a table: rows = habits (GYM/KIT/MUA/DOG), columns = last 7 days.
+// Each cell = green (done), red (missed), dark (blocked), amber outline (today).
+function buildHabitCompletionGrid(last7, habitHistory) {
+  const el = document.getElementById('habitCompletionGrid');
+  if (!el) return;
+
+  const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const todayIdx   = 6; // last7[6] is always today
+
+  // Column headers: day name + date
+  const colHeaders = last7.map((d, i) => {
+    const isToday  = i === todayIdx;
+    const dayLabel = dayNames[d.getDay()];
+    const dateLabel = `${d.getDate()} ${monthNames[d.getMonth()]}`;
+    return `<th class="hcg-th${isToday ? ' hcg-th-today' : ''}">
+      <span class="hcg-col-day">${dayLabel}</span>
+      <span class="hcg-col-date">${dateLabel}</span>
+    </th>`;
+  }).join('');
+
+  // Habit rows
+  const habitsOrdered = [
+    { id: 'gym',  tag: 'GYM',  name: 'Gym'         },
+    { id: 'kite', tag: 'KIT',  name: 'Kite'        },
+    { id: 'muay', tag: 'MUA',  name: 'Muay Thai'   },
+    { id: 'dogs', tag: 'DOG',  name: 'Dogs'        },
+  ];
+
+  const rows = habitsOrdered.map(hab => {
+    const stateHabit = STATE.habits.find(h => h.id === hab.id);
+    const isBlocked  = stateHabit?.blocked ?? false;
+    const history    = habitHistory[hab.id] ?? Array(7).fill(false);
+
+    // Streak: count consecutive done days from today backwards
+    let streak = 0;
+    for (let i = todayIdx; i >= 0; i--) {
+      if (!isBlocked && history[i]) streak++;
+      else break;
+    }
+
+    // Completion rate this week
+    const doneCount  = isBlocked ? 0 : history.filter(Boolean).length;
+    const available  = isBlocked ? 0 : history.length;
+    const pct        = available > 0 ? Math.round(doneCount / available * 100) : 0;
+
+    const cells = history.map((done, i) => {
+      const isToday = i === todayIdx;
+      let cellClass = 'hcg-cell';
+      let label     = '';
+      let title     = '';
+
+      if (isBlocked) {
+        cellClass += ' hcg-cell-blocked';
+        title      = `${hab.name}: blocked`;
+        label      = '—';
+      } else if (done) {
+        cellClass += ' hcg-cell-done';
+        title      = `${hab.name}: done`;
+        label      = '✓';
+      } else {
+        cellClass += ' hcg-cell-missed';
+        title      = `${hab.name}: missed`;
+        label      = '×';
+      }
+      if (isToday) cellClass += ' hcg-cell-today';
+
+      return `<td class="${cellClass}" title="${title}">${label}</td>`;
+    }).join('');
+
+    const streakBadge = streak >= 2
+      ? `<span class="hcg-streak">${streak}d</span>`
+      : '';
+    const pctColor = pct >= 70 ? 'var(--color-success)' : pct >= 40 ? 'var(--color-amber)' : 'var(--color-error)';
+
+    return `
+      <tr class="hcg-row">
+        <td class="hcg-habit-label">
+          <span class="hcg-tag">${hab.tag}</span>
+          <span class="hcg-habit-name">${hab.name}</span>
+          ${streakBadge}
+        </td>
+        ${cells}
+        <td class="hcg-pct" style="color:${pctColor}">${isBlocked ? '—' : pct + '%'}</td>
+      </tr>`;
+  }).join('');
+
+  // Day-column score bar (how many habits done per day)
+  const dayScores = last7.map((_, i) => {
+    return habitsOrdered.reduce((sum, hab) => {
+      const isBlocked = STATE.habits.find(h => h.id === hab.id)?.blocked ?? false;
+      return sum + (!isBlocked && (habitHistory[hab.id]?.[i] ?? false) ? 1 : 0);
+    }, 0);
+  });
+  const maxScore   = habitsOrdered.filter(h => !(STATE.habits.find(s=>s.id===h.id)?.blocked)).length || 1;
+  const scoreRow   = last7.map((_, i) => {
+    const s   = dayScores[i];
+    const pct = Math.round(s / maxScore * 100);
+    const col = pct === 100 ? 'var(--color-success)' : pct >= 50 ? 'var(--color-amber)' : 'var(--color-error)';
+    const isToday = i === todayIdx;
+    return `<td class="hcg-score-cell${isToday ? ' hcg-score-today' : ''}">
+      <div class="hcg-score-bar-wrap">
+        <div class="hcg-score-bar" style="height:${pct}%;background:${col}"></div>
+      </div>
+      <div class="hcg-score-num" style="color:${col}">${s}/${maxScore}</div>
+    </td>`;
+  }).join('');
+
+  el.innerHTML = `
+    <table class="hcg-table">
+      <thead>
+        <tr>
+          <th class="hcg-th hcg-habit-col">HABIT</th>
+          ${colHeaders}
+          <th class="hcg-th hcg-pct-col">RATE</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+        <tr class="hcg-score-row">
+          <td class="hcg-habit-label" style="color:var(--color-text-muted);font-size:0.62rem;letter-spacing:0.08em">DAILY SCORE</td>
+          ${scoreRow}
+          <td></td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
 function buildWeekView() {
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const today = new Date();
@@ -1078,6 +1207,19 @@ function buildWeekView() {
     d.setDate(d.getDate() - (6 - i));
     return d;
   });
+
+  // Per-habit per-day history matrix [habit][day 0..6]
+  // day 6 = today (uses live STATE.habits[].done)
+  // Realistic simulation: GYM consistent, KITE rare (repair), MUA blocked, DOG good
+  const habitHistory = {
+    gym:  [true,  false, true,  true,  true,  false, STATE.habits.find(h=>h.id==='gym')?.done  ?? false],
+    kite: [false, false, false, false, false, false, STATE.habits.find(h=>h.id==='kite')?.done ?? false],
+    muay: [false, false, false, false, false, false, STATE.habits.find(h=>h.id==='muay')?.done ?? false],
+    dogs: [true,  true,  false, true,  true,  true,  STATE.habits.find(h=>h.id==='dogs')?.done ?? false],
+  };
+
+  // Habit completion grid 7×4
+  buildHabitCompletionGrid(last7, habitHistory);
 
   // Simulate realistic habit completion for each day
   // (today uses real STATE data for the last cell)

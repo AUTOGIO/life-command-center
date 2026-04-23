@@ -1600,3 +1600,165 @@ body::before {
 }
 .mood-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .mood-btn.selected { border-color: var(--color-amber); color: var(--color-amber); background: var(--color-amber-highlight); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HABIT COMPLETION GRID 7×4
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Full-width card in week grid */
+.week-card--full {
+  grid-column: 1 / -1;
+}
+
+.hcg-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: var(--font-mono);
+}
+
+/* Column headers */
+.hcg-th {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border-bright);
+  padding: 4px 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+.hcg-th-today {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+.hcg-habit-col { text-align: left; width: 160px; }
+.hcg-pct-col   { width: 52px; }
+
+.hcg-col-day  { display: block; font-weight: 800; font-size: 0.68rem; }
+.hcg-col-date { display: block; font-size: 0.58rem; color: var(--color-text-faint); margin-top: 1px; }
+.hcg-th-today .hcg-col-date { color: var(--color-primary); opacity: 0.7; }
+
+/* Habit label cell */
+.hcg-row td { padding: 5px 4px; border-bottom: 1px solid var(--color-divider); vertical-align: middle; }
+.hcg-row:last-child td { border-bottom: none; }
+
+.hcg-habit-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+.hcg-tag {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-highlight);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  flex-shrink: 0;
+}
+.hcg-habit-name {
+  font-size: 0.70rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.hcg-streak {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-success-highlight);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+  letter-spacing: 0.04em;
+}
+
+/* Completion cells */
+.hcg-cell {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  width: 44px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  position: relative;
+}
+.hcg-cell-done {
+  color: var(--color-success);
+  background: var(--color-success-highlight);
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+.hcg-cell-missed {
+  color: var(--color-error);
+  background: var(--color-error-highlight);
+  border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
+}
+.hcg-cell-blocked {
+  color: var(--color-text-faint);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+}
+/* Today column: amber outline on every cell */
+.hcg-cell-today {
+  outline: 1.5px solid var(--color-amber);
+  outline-offset: -2px;
+}
+
+/* Rate column */
+.hcg-pct {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Daily score bar row */
+.hcg-score-row td { padding: 6px 4px 2px; border-top: 1px solid var(--color-border); border-bottom: none; }
+.hcg-score-cell { text-align: center; vertical-align: bottom; }
+.hcg-score-bar-wrap {
+  height: 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin-bottom: 3px;
+}
+.hcg-score-bar {
+  width: 60%;
+  min-height: 2px;
+  border-radius: 1px 1px 0 0;
+  transition: height 0.4s ease;
+}
+.hcg-score-num {
+  font-size: 0.60rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.hcg-score-today .hcg-score-num { color: var(--color-amber) !important; }
+.hcg-score-today .hcg-score-bar { box-shadow: 0 0 6px currentColor; }
+
+/* Legend */
+.hcg-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+}
+.hcg-swatch {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.hcg-done    { background: var(--color-success); }
+.hcg-missed  { background: var(--color-error); }
+.hcg-blocked { background: var(--color-surface-offset); border: 1px solid var(--color-border); }
+.hcg-today   { background: transparent; outline: 1.5px solid var(--color-amber); outline-offset: 1px; }
