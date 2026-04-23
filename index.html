@@ -76,20 +76,38 @@
               <div class="condition-label">Wind (km/h)</div>
             </div>
             <div class="condition-item">
+              <div class="condition-icon">💥</div>
+              <div class="condition-value" id="windGusts">—</div>
+              <div class="condition-label">Gusts (km/h)</div>
+            </div>
+            <div class="condition-item">
               <div class="condition-icon">🧭</div>
               <div class="condition-value" id="windDir">—</div>
               <div class="condition-label">Direction</div>
             </div>
             <div class="condition-item">
               <div class="condition-icon">🌊</div>
-              <div class="condition-value" id="tideCurrent">—</div>
-              <div class="condition-label">Tide</div>
+              <div class="condition-value" id="waveHeight">—</div>
+              <div class="condition-label">Wave (m)</div>
             </div>
             <div class="condition-item">
-              <div class="condition-icon">⏱️</div>
-              <div class="condition-value" id="tideNext">—</div>
-              <div class="condition-label">Next change</div>
+              <div class="condition-icon">〰️</div>
+              <div class="condition-value" id="swellHeight">—</div>
+              <div class="condition-label">Swell (m)</div>
             </div>
+            <div class="condition-item">
+              <div class="condition-icon">🌡️</div>
+              <div class="condition-value" id="tideCurrent">—</div>
+              <div class="condition-label">Tide level</div>
+            </div>
+          </div>
+          <!-- Tide trend bar -->
+          <div class="tide-trend" id="tideTrend">
+            <div class="tide-trend-label" id="tideTrendLabel">Tide: checking…</div>
+            <div class="tide-bar-track">
+              <div class="tide-bar-fill" id="tideBarFill" style="width:50%"></div>
+            </div>
+            <div class="tide-trend-next" id="tideTrendNext">—</div>
           </div>
           <div class="kite-status-bar" id="kiteStatusBar">
             <span class="kite-status-dot" id="kiteStatusDot"></span>

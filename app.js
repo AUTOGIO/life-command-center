@@ -415,34 +415,118 @@ function initNotes() {
   });
 }
 
-// ── WEATHER (Open-Meteo) ─────────────────────────────────────────────────
-async function fetchWeather() {
+// ── LIVE CONDITIONS — Open-Meteo Wind + Marine ───────────────────────────
+// Fetches both APIs in parallel. No API key required.
+async function fetchConditions() {
   const { lat, lon, minWind } = STATE.settings;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m,temperature_2m&wind_speed_unit=kmh&timezone=America%2FFortaleza`;
+
+  const windUrl   = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kmh&timezone=America%2FFortaleza`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,swell_wave_height,swell_wave_direction,swell_wave_period,sea_level_height_msl&hourly=sea_level_height_msl&forecast_hours=24&timezone=America%2FFortaleza`;
+
   try {
-    const res = await fetch(url);
-    const data = await res.json();
-    const current = data.current;
-    const speed = Math.round(current.wind_speed_10m);
-    const dir = windDirLabel(current.wind_direction_10m);
+    const [windRes, marineRes] = await Promise.all([fetch(windUrl), fetch(marineUrl)]);
+    const [windData, marineData] = await Promise.all([windRes.json(), marineRes.json()]);
+
+    // ── Wind ──
+    const w = windData.current;
+    const speed  = Math.round(w.wind_speed_10m);
+    const gusts  = Math.round(w.wind_gusts_10m);
+    const dirDeg = w.wind_direction_10m;
+    const dir    = windDirLabel(dirDeg);
+    const temp   = Math.round(w.temperature_2m);
 
     document.getElementById('windSpeed').textContent = speed;
-    document.getElementById('windDir').textContent = dir;
+    document.getElementById('windGusts').textContent = gusts;
+    document.getElementById('windDir').textContent   = dir;
 
-    STATE.weather = { speed, dir };
+    // ── Marine ──
+    const m = marineData.current;
+    const waveH   = m.wave_height.toFixed(1);
+    const swellH  = m.swell_wave_height.toFixed(1);
+    const swellDir = windDirLabel(m.swell_wave_direction);
+    const swellPer = m.swell_wave_period.toFixed(0);
+    const seaLevel = m.sea_level_height_msl; // metres MSL, real tidal data
 
-    // Evaluate kite conditions
+    document.getElementById('waveHeight').textContent  = waveH;
+    document.getElementById('swellHeight').textContent = swellH;
+
+    // ── Real tide from sea_level_height_msl hourly series ──
+    const hourlyTimes  = marineData.hourly.time;
+    const hourlyLevels = marineData.hourly.sea_level_height_msl;
+    const nowStr = new Date().toISOString().slice(0, 13); // "2026-04-23T10"
+    const currentIdx = hourlyTimes.findIndex(t => t.startsWith(nowStr));
+
+    // Range for normalised bar (local min/max in 24h window)
+    const validLevels = hourlyLevels.filter(v => v !== null);
+    const minL = Math.min(...validLevels);
+    const maxL = Math.max(...validLevels);
+    const range = maxL - minL || 1;
+    const normPct = currentIdx >= 0
+      ? Math.round(((hourlyLevels[currentIdx] - minL) / range) * 100)
+      : 50;
+
+    // Determine rising vs falling from adjacent hours
+    let tideLabel = 'Tide';
+    let tideArrow = '';
+    if (currentIdx > 0 && currentIdx < hourlyLevels.length - 1) {
+      const prev = hourlyLevels[currentIdx - 1];
+      const next = hourlyLevels[currentIdx + 1];
+      const current = hourlyLevels[currentIdx];
+      if (current > prev && current > next) { tideLabel = 'High tide'; tideArrow = ''; }
+      else if (current < prev && current < next) { tideLabel = 'Low tide'; tideArrow = ''; }
+      else if (next > current) { tideLabel = 'Rising'; tideArrow = '↑'; }
+      else { tideLabel = 'Falling'; tideArrow = '↓'; }
+    }
+
+    const levelM = currentIdx >= 0 ? hourlyLevels[currentIdx] : seaLevel;
+    document.getElementById('tideCurrent').textContent =
+      levelM !== null ? `${levelM > 0 ? '+' : ''}${levelM.toFixed(2)}m` : '—';
+
+    // Find next extreme in hourly series
+    let nextExtremeLabel = '—';
+    if (currentIdx >= 0 && currentIdx < hourlyLevels.length - 2) {
+      for (let i = currentIdx + 1; i < hourlyLevels.length - 1; i++) {
+        const p = hourlyLevels[i - 1], c = hourlyLevels[i], n = hourlyLevels[i + 1];
+        if (c !== null && p !== null && n !== null) {
+          if (c > p && c > n) {
+            const t = new Date(hourlyTimes[i]);
+            nextExtremeLabel = `High ${t.getHours()}:00`;
+            break;
+          } else if (c < p && c < n) {
+            const t = new Date(hourlyTimes[i]);
+            nextExtremeLabel = `Low ${t.getHours()}:00`;
+            break;
+          }
+        }
+      }
+    }
+
+    document.getElementById('tideTrendLabel').textContent = `${tideLabel} ${tideArrow}`;
+    document.getElementById('tideBarFill').style.width = `${normPct}%`;
+    document.getElementById('tideTrendNext').textContent = `→ ${nextExtremeLabel}`;
+
+    // ── Decision logic ──
     const kiteReady = STATE.settings.kiteStatus === 'ready';
-    const windOk = speed >= minWind;
+    const windOk  = speed >= minWind;
+    const gustsOk = gusts <= 45; // too gusty is dangerous
+    const wavesOk = parseFloat(waveH) <= 2.0; // >2m is rough for most kiters
     STATE.conditionsOk = kiteReady && windOk;
-    updateConditionsIndicator(speed, dir, kiteReady, windOk);
+
+    STATE.weather = { speed, gusts, dir, dirDeg, temp, waveH, swellH, swellDir, swellPer };
+    STATE.tides   = { level: levelM, rising: tideArrow === '↑', tideLabel };
+
+    updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk, wavesOk, waveH);
     updateKiteStatus();
     updateNudge();
-    document.getElementById('conditionsUpdated').textContent = `Updated ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    document.getElementById('conditionsUpdated').innerHTML =
+      `<span class="live-badge">LIVE</span> Updated ${ts}`;
+
   } catch(e) {
-    document.getElementById('windSpeed').textContent = '—';
-    document.getElementById('windDir').textContent = '—';
-    document.getElementById('conditionsUpdated').textContent = 'Could not load weather';
+    console.error('Conditions fetch failed:', e);
+    document.getElementById('conditionsUpdated').textContent = 'Could not load — retrying…';
   }
 }
 
@@ -451,7 +535,7 @@ function windDirLabel(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
-function updateConditionsIndicator(speed, dir, kiteReady, windOk) {
+function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk, wavesOk, waveH) {
   const badge = document.getElementById('goBadge');
   const label = document.getElementById('goLabel');
 
@@ -459,73 +543,34 @@ function updateConditionsIndicator(speed, dir, kiteReady, windOk) {
     badge.textContent = '—';
     badge.className = 'go-badge pending';
     label.textContent = 'Kites not ready yet';
-  } else if (windOk) {
+    return;
+  }
+
+  if (windOk && gustsOk && wavesOk) {
     badge.textContent = 'GO KITE';
     badge.className = 'go-badge go';
-    label.textContent = `${speed} km/h ${dir} — Conditions good`;
+    label.textContent = `${speed} km/h ${dir} · Gusts ${gusts} · Waves ${waveH}m`;
+  } else if (windOk && !gustsOk) {
+    badge.textContent = 'TOO GUSTY';
+    badge.className = 'go-badge nogo';
+    label.textContent = `Gusts ${gusts} km/h — too strong. Gym day.`;
+  } else if (windOk && !wavesOk) {
+    badge.textContent = 'ROUGH SEA';
+    badge.className = 'go-badge nogo';
+    label.textContent = `Waves ${waveH}m — too rough. Gym day.`;
   } else {
     badge.textContent = 'GYM DAY';
     badge.className = 'go-badge nogo';
-    label.textContent = `${speed} km/h — Need ${STATE.settings.minWind}+ km/h`;
+    label.textContent = `Wind ${speed} km/h — Need ${STATE.settings.minWind}+ km/h`;
   }
 }
 
 function updateKiteStatus() {
-  const dot = document.getElementById('kiteStatusDot');
+  const dot  = document.getElementById('kiteStatusDot');
   const text = document.getElementById('kiteStatusText');
   const { kiteStatus } = STATE.settings;
   dot.className = `kite-status-dot ${kiteStatus}`;
   text.textContent = kiteStatus === 'repair' ? 'Kites in repair — waiting' : 'Kites ready to fly';
-}
-
-// ── TIDE (estimated based on time) ────────────────────────────────────────
-// Using a simple harmonic model since we can't hit Brazilian Navy API directly.
-// João Pessoa has semi-diurnal tides (~2 highs, 2 lows per day, ~6h cycle)
-function computeTide() {
-  const now = new Date();
-  // Reference: approximate tidal period = 12h 25min = 745 min
-  const period = 745 * 60 * 1000; // ms
-  // Phase offset: approximate high tide around 06:00 local
-  const refHigh = new Date(now);
-  refHigh.setHours(6, 0, 0, 0);
-  const elapsed = (now - refHigh + period * 10) % period;
-  const angle = (elapsed / period) * 2 * Math.PI;
-  // Height: 1.0m low, 2.4m high (João Pessoa average range)
-  const midHeight = 1.7;
-  const amplitude = 0.7;
-  const height = midHeight + amplitude * Math.cos(angle);
-  const isLow = Math.cos(angle) < 0;
-  const isVeryLow = height < 1.2;
-
-  // Time to next inflection
-  let nextMs;
-  if (isLow) {
-    // Next is high: pi away from current
-    const toHigh = (Math.PI - (angle % Math.PI)) / (2 * Math.PI) * period;
-    nextMs = toHigh;
-  } else {
-    const toLow = (Math.PI - (angle % Math.PI)) / (2 * Math.PI) * period;
-    nextMs = toLow;
-  }
-  const nextMins = Math.round(nextMs / 60000);
-  const nextH = Math.floor(nextMins / 60);
-  const nextM = nextMins % 60;
-  const nextLabel = nextH > 0 ? `${nextH}h ${nextM}m` : `${nextM}m`;
-
-  document.getElementById('tideCurrent').textContent = isLow ? (isVeryLow ? 'Very low' : 'Low') : (height > 2.2 ? 'Very high' : 'High');
-  document.getElementById('tideNext').textContent = `${nextLabel} → ${isLow ? '↑ High' : '↓ Low'}`;
-
-  STATE.tides = { height: height.toFixed(1), isLow, isVeryLow };
-
-  // Update kite indicator if we have weather
-  if (STATE.weather) {
-    const { speed, dir } = STATE.weather;
-    const kiteReady = STATE.settings.kiteStatus === 'ready';
-    const windOk = speed >= STATE.settings.minWind;
-    const tideOk = isLow;
-    STATE.conditionsOk = kiteReady && windOk; // tide is optional (kiting can be at high tide too)
-    updateConditionsIndicator(speed, dir, kiteReady, windOk);
-  }
 }
 
 // ── NUDGE BAR ─────────────────────────────────────────────────────────────
@@ -672,10 +717,8 @@ function init() {
   initProjectForm();
   initNotes();
   initSettings();
-  computeTide();
-  setInterval(computeTide, 5 * 60 * 1000);
-  fetchWeather();
-  setInterval(fetchWeather, 15 * 60 * 1000);
+  fetchConditions();
+  setInterval(fetchConditions, 10 * 60 * 1000); // refresh every 10 min
   updateNudge();
   setInterval(updateNudge, 5 * 60 * 1000);
 }
