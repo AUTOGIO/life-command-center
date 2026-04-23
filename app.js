@@ -839,13 +839,12 @@ function initNotes() {
 async function fetchConditions() {
   const { lat, lon, minWind } = STATE.settings;
 
-  // Only wind + waves needed from Open-Meteo now; tide comes from DNPVN table.
-  const windUrl   = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kmh&timezone=America%2FFortaleza`;
-  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=America%2FFortaleza`;
+  // Wind only — tide from DNPVN table, waves removed from conditions block.
+  const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kmh&timezone=America%2FFortaleza`;
 
   try {
-    const [windRes, marineRes] = await Promise.all([fetch(windUrl), fetch(marineUrl)]);
-    const [windData, marineData] = await Promise.all([windRes.json(), marineRes.json()]);
+    const windRes  = await fetch(windUrl);
+    const windData = await windRes.json();
 
     // ── Wind ──
     const w = windData.current;
@@ -859,16 +858,6 @@ async function fetchConditions() {
     document.getElementById('windGusts').textContent = `${gusts} km/h`;
     document.getElementById('windDir').textContent   = dir;
 
-    // ── Waves (Open-Meteo Marine — no tide fields needed) ──
-    const m = marineData.current;
-    const waveH    = m.wave_height.toFixed(1);
-    const swellH   = m.swell_wave_height.toFixed(1);
-    const swellDir = windDirLabel(m.swell_wave_direction);
-    const swellPer = m.swell_wave_period.toFixed(0);
-
-    document.getElementById('waveHeight').textContent  = `${waveH} m`;
-    document.getElementById('swellHeight').textContent = `${swellH} m`;
-
     // ── Conditions table status column ──
     function setCondStatus(id, ok, text) {
       const el = document.getElementById(id);
@@ -879,8 +868,6 @@ async function fetchConditions() {
     setCondStatus('condStatusWind',  speed >= minWind,          speed >= minWind ? 'OK' : 'LOW');
     setCondStatus('condStatusGusts', gusts <= 45,               gusts <= 45 ? 'OK' : 'HIGH');
     setCondStatus('condStatusDir',   null,                      dir);
-    setCondStatus('condStatusWave',  parseFloat(waveH) <= 2.0,  parseFloat(waveH) <= 2.0 ? 'OK' : 'HIGH');
-    setCondStatus('condStatusSwell', null,                      `${swellDir} ${swellPer}s`);
 
     // ── Tide: DNPVN 2026 harmonic table (cosine interpolation) ──
     // Rendered by renderTideFromDNPVN() which is called from initTides().
@@ -891,13 +878,11 @@ async function fetchConditions() {
     const kiteReady = STATE.settings.kiteStatus === 'ready';
     const windOk  = speed >= minWind;
     const gustsOk = gusts <= 45;
-    const wavesOk = parseFloat(waveH) <= 2.0;
     STATE.conditionsOk = kiteReady && windOk;
 
-    const tideLevel = STATE.tides ? STATE.tides.level : null;
-    STATE.weather = { speed, gusts, dir, dirDeg, temp, waveH, swellH, swellDir, swellPer };
+    STATE.weather = { speed, gusts, dir, dirDeg, temp };
 
-    updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk, wavesOk, waveH);
+    updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk);
     updateKiteStatus();
     updateNudge();
 
@@ -917,7 +902,7 @@ function windDirLabel(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
-function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk, wavesOk, waveH) {
+function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk) {
   const badge = document.getElementById('goBadge');
   const label = document.getElementById('goLabel');
 
@@ -1107,8 +1092,6 @@ function init() {
   });
   fetchConditions();
   setInterval(fetchConditions, 10 * 60 * 1000); // refresh every 10 min
-  fetchForecast();
-  setInterval(fetchForecast, 60 * 60 * 1000);   // forecast refreshes hourly
   fetch48hWind();
   setInterval(fetch48hWind, 60 * 60 * 1000);     // wind chart refreshes hourly
   updateNudge();

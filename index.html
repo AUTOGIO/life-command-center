@@ -69,27 +69,6 @@
     <!-- MAIN CONTENT -->
     <main class="main" id="mainArea">
 
-      <!-- 7-DAY KITE FORECAST STRIP -->
-      <section class="card forecast-card" aria-label="7-day kite forecast">
-        <div class="card-header">
-          <h2 class="card-title">7-Day Kite Forecast</h2>
-          <span class="card-subtitle" id="forecastUpdated">João Pessoa · 09:00 morning window</span>
-        </div>
-        <div class="forecast-table-wrap" id="forecastStrip">
-          <table class="forecast-table">
-            <thead><tr>
-              <th>DAY</th><th>DATE</th><th>DECISION</th>
-              <th>WIND</th><th>GUSTS</th><th>WAVE</th><th>TIDE 09:00</th><th>NOTE</th>
-            </tr></thead>
-            <tbody id="forecastTbody">
-              <tr><td colspan="8" style="text-align:center;color:var(--color-text-muted);padding:1rem 0">Loading forecast…</td></tr>
-            </tbody>
-          </table>
-          <!-- Wind bar mini-chart (7 days) built by JS -->
-          <div class="forecast-wind-chart" id="forecastWindChart"></div>
-        </div>
-      </section>
-
       <!-- ROW 1: CONDITIONS + TODAY BLOCK -->
       <div class="grid-row grid-row--top">
 
@@ -126,18 +105,6 @@
                 <td class="cond-val"><span id="windDir">—</span></td>
                 <td class="cond-thresh">—</td>
                 <td class="cond-status" id="condStatusDir">—</td>
-              </tr>
-              <tr class="cond-row" id="condRowWave">
-                <td class="cond-param">WAVE</td>
-                <td class="cond-val"><span id="waveHeight">—</span></td>
-                <td class="cond-thresh">max 2.0 m</td>
-                <td class="cond-status" id="condStatusWave">—</td>
-              </tr>
-              <tr class="cond-row" id="condRowSwell">
-                <td class="cond-param">SWELL</td>
-                <td class="cond-val"><span id="swellHeight">—</span></td>
-                <td class="cond-thresh">info</td>
-                <td class="cond-status" id="condStatusSwell">—</td>
               </tr>
               <tr class="cond-row" id="condRowTide">
                 <td class="cond-param">TIDE</td>
