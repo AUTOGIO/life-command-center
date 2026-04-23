@@ -141,7 +141,9 @@ const STATE = {
   settings: {
     lat: -7.115,
     lon: -34.863,
-    minWind: 18,
+    minWindKt: 10,    // knots — default 10 kt ≈ 18 km/h
+    maxGustsKt: 24,   // knots — default 24 kt ≈ 45 km/h
+    maxTideM: 1.6,    // metres — Cabedelo kite spot max safe tide
     shoulderDaysLeft: 3,
     kiteStatus: 'repair', // 'repair' | 'ready'
   },
@@ -357,7 +359,7 @@ function buildWindChart() {
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
   const n     = d.times.length;
-  const minWind = STATE.settings.minWind || 18;
+  const minWindKt = STATE.settings.minWindKt || 10;
   if (thrEl) thrEl.textContent = minWind;
 
   const maxVal = Math.max(Math.max(...d.gusts), minWind + 10, 40);
@@ -846,17 +848,29 @@ async function fetchConditions() {
     const windRes  = await fetch(windUrl);
     const windData = await windRes.json();
 
-    // ── Wind ──
+    // ── Wind (convert km/h → knots) ──
+    const KMH_TO_KT = 0.539957;
     const w = windData.current;
-    const speed  = Math.round(w.wind_speed_10m);
-    const gusts  = Math.round(w.wind_gusts_10m);
-    const dirDeg = w.wind_direction_10m;
-    const dir    = windDirLabel(dirDeg);
-    const temp   = Math.round(w.temperature_2m);
+    const speedKmh  = w.wind_speed_10m;
+    const gustsKmh  = w.wind_gusts_10m;
+    const speedKt   = Math.round(speedKmh * KMH_TO_KT * 10) / 10;
+    const gustsKt   = Math.round(gustsKmh * KMH_TO_KT * 10) / 10;
+    const dirDeg    = w.wind_direction_10m;
+    const dir       = windDirLabel(dirDeg);
+    const temp      = Math.round(w.temperature_2m);
 
-    document.getElementById('windSpeed').textContent = `${speed} km/h`;
-    document.getElementById('windGusts').textContent = `${gusts} km/h`;
+    const minWindKt  = STATE.settings.minWindKt  || 10;
+    const maxGustsKt = STATE.settings.maxGustsKt || 24;
+    const maxTideM   = STATE.settings.maxTideM   || 1.6;
+
+    // Display in knots
+    document.getElementById('windSpeed').textContent = `${speedKt} kt`;
+    document.getElementById('windGusts').textContent = `${gustsKt} kt`;
     document.getElementById('windDir').textContent   = dir;
+    const thrEl = document.getElementById('windThreshDisplay');
+    if (thrEl) thrEl.textContent = minWindKt;
+    const tideMaxEl = document.getElementById('tideMaxDisplay');
+    if (tideMaxEl) tideMaxEl.textContent = maxTideM;
 
     // ── Conditions table status column ──
     function setCondStatus(id, ok, text) {
@@ -865,24 +879,25 @@ async function fetchConditions() {
       el.textContent  = text;
       el.className    = 'cond-status ' + (ok === true ? 'cond-ok' : ok === false ? 'cond-fail' : 'cond-info');
     }
-    setCondStatus('condStatusWind',  speed >= minWind,          speed >= minWind ? 'OK' : 'LOW');
-    setCondStatus('condStatusGusts', gusts <= 45,               gusts <= 45 ? 'OK' : 'HIGH');
-    setCondStatus('condStatusDir',   null,                      dir);
+    setCondStatus('condStatusWind',  speedKt >= minWindKt,  speedKt >= minWindKt  ? 'OK' : 'LOW');
+    setCondStatus('condStatusGusts', gustsKt <= maxGustsKt, gustsKt <= maxGustsKt ? 'OK' : 'HIGH');
+    setCondStatus('condStatusDir',   null,                  dir);
 
     // ── Tide: DNPVN 2026 harmonic table (cosine interpolation) ──
-    // Rendered by renderTideFromDNPVN() which is called from initTides().
-    // If the engine is already loaded, refresh it now too.
     renderTideFromDNPVN();
 
-    // ── Decision logic ──
+    // ── Decision logic (knots + tide) ──
     const kiteReady = STATE.settings.kiteStatus === 'ready';
-    const windOk  = speed >= minWind;
-    const gustsOk = gusts <= 45;
-    STATE.conditionsOk = kiteReady && windOk;
+    const windOk    = speedKt >= minWindKt;
+    const gustsOk   = gustsKt <= maxGustsKt;
+    const tideLevel = STATE.tides ? STATE.tides.level : null;
+    const tideOk    = tideLevel === null ? true : tideLevel <= maxTideM;
+    STATE.conditionsOk = kiteReady && windOk && tideOk;
 
-    STATE.weather = { speed, gusts, dir, dirDeg, temp };
+    STATE.weather = { speedKt, gustsKt, speedKmh, gustsKmh, dir, dirDeg, temp };
 
-    updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk);
+    updateGNGBanner(kiteReady, windOk, gustsOk, tideOk, speedKt, gustsKt, tideLevel, minWindKt, maxGustsKt, maxTideM);
+    updateConditionsIndicator(speedKt, gustsKt, dir, kiteReady, windOk, gustsOk);
     updateKiteStatus();
     updateNudge();
 
@@ -902,6 +917,50 @@ function windDirLabel(deg) {
   return dirs[Math.round(deg / 45) % 8];
 }
 
+function updateGNGBanner(kiteReady, windOk, gustsOk, tideOk, speedKt, gustsKt, tideLevel, minWindKt, maxGustsKt, maxTideM) {
+  const banner  = document.getElementById('gngBanner');
+  const verdict = document.getElementById('gngVerdict');
+  const reason  = document.getElementById('gngReason');
+  const metrics = document.getElementById('gngMetrics');
+  if (!banner) return;
+
+  const tideLabelVal = tideLevel !== null ? `${tideLevel.toFixed(2)}m` : '—';
+  const windLabel    = `${speedKt} kt`;
+  const gustLabel    = `${gustsKt} kt`;
+
+  // Build compact metric chips
+  const chip = (label, val, ok) =>
+    `<span class="gng-chip ${ok ? 'gng-chip-ok' : ok === null ? 'gng-chip-info' : 'gng-chip-fail'}">${label} ${val}</span>`;
+
+  metrics.innerHTML = [
+    chip('WIND',  windLabel,    windOk),
+    chip('GUSTS', gustLabel,    gustsOk),
+    chip('TIDE',  tideLabelVal, tideLevel === null ? null : tideOk),
+    chip('KITES', kiteReady ? 'READY' : 'REPAIR', kiteReady ? true : false),
+  ].join('');
+
+  if (!kiteReady) {
+    banner.dataset.state = 'blocked';
+    verdict.textContent  = 'KITES IN REPAIR';
+    reason.textContent   = 'Mark kites ready in Settings to enable GO/NO-GO';
+    return;
+  }
+
+  if (windOk && gustsOk && tideOk) {
+    banner.dataset.state = 'go';
+    verdict.textContent  = 'GO KITE';
+    reason.textContent   = `${speedKt} kt ${document.getElementById('windDir')?.textContent || ''} · Gusts ${gustsKt} kt · Tide ${tideLabelVal}`;
+  } else {
+    banner.dataset.state = 'nogo';
+    const reasons = [];
+    if (!windOk)  reasons.push(`Wind ${speedKt} kt (need ${minWindKt}+)`);
+    if (!gustsOk) reasons.push(`Gusts ${gustsKt} kt (max ${maxGustsKt})`);
+    if (!tideOk)  reasons.push(`Tide ${tideLabelVal} (max ${maxTideM}m)`);
+    verdict.textContent = 'NO-GO';
+    reason.textContent  = reasons.join(' · ') || 'Conditions not met';
+  }
+}
+
 function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk) {
   const badge = document.getElementById('goBadge');
   const label = document.getElementById('goLabel');
@@ -913,22 +972,18 @@ function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk
     return;
   }
 
-  if (windOk && gustsOk && wavesOk) {
+  if (windOk && gustsOk) {
     badge.textContent = 'GO KITE';
     badge.className = 'go-badge go';
-    label.textContent = `${speed} km/h ${dir} · Gusts ${gusts} · Waves ${waveH}m`;
+    label.textContent = `${speed} kt ${dir} · Gusts ${gusts} kt`;
   } else if (windOk && !gustsOk) {
     badge.textContent = 'TOO GUSTY';
     badge.className = 'go-badge nogo';
-    label.textContent = `Gusts ${gusts} km/h — too strong. Gym day.`;
-  } else if (windOk && !wavesOk) {
-    badge.textContent = 'ROUGH SEA';
-    badge.className = 'go-badge nogo';
-    label.textContent = `Waves ${waveH}m — too rough. Gym day.`;
+    label.textContent = `Gusts ${gusts} kt — too strong`;
   } else {
     badge.textContent = 'GYM DAY';
     badge.className = 'go-badge nogo';
-    label.textContent = `Wind ${speed} km/h — Need ${STATE.settings.minWind}+ km/h`;
+    label.textContent = `Wind ${speed} kt — need ${STATE.settings.minWindKt}+ kt`;
   }
 }
 
@@ -1101,252 +1156,6 @@ function init() {
 document.addEventListener('DOMContentLoaded', init);
 
 // ── 7-DAY KITE FORECAST ───────────────────────────────────────────────────
-async function fetchForecast() {
-  const { lat, lon, minWind } = STATE.settings;
-
-  // Fetch 7-day hourly wind + marine data
-  // Wind: hourly wind_speed_10m, wind_gusts_10m for 7 days
-  const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m` +
-    `&wind_speed_unit=kmh&forecast_days=7&timezone=America%2FFortaleza`;
-
-  // Marine: hourly wave_height, swell_wave_height for 7 days (tide now from DNPVN)
-  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
-    `&hourly=wave_height,swell_wave_height` +
-    `&forecast_days=7&timezone=America%2FFortaleza`;
-
-  try {
-    const [windRes, marineRes] = await Promise.all([fetch(windUrl), fetch(marineUrl)]);
-    const [windData, marineData] = await Promise.all([windRes.json(), marineRes.json()]);
-
-    const windTimes  = windData.hourly.time;
-    const windSpeeds = windData.hourly.wind_speed_10m;
-    const windGusts  = windData.hourly.wind_gusts_10m;
-    const windDirs   = windData.hourly.wind_direction_10m;
-    const waves      = marineData.hourly.wave_height;
-    const swells     = marineData.hourly.swell_wave_height;
-
-    // For each of the next 7 days, pick the 09:00 local hour slot
-    // Use local date strings (America/Fortaleza = UTC-3) to match Open-Meteo response
-    const today = new Date();
-    const localDateStr = (d) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() + d);
-      // Format in local timezone (Fortaleza UTC-3)
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-    const todayStr = localDateStr(0);
-    const days = [];
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + d);
-      const dateStr = localDateStr(d);
-
-      // Target 09:00 local — find index in hourly.time array matching "YYYY-MM-DDTHH:00"
-      // Open-Meteo returns times in local timezone as ISO strings like "2026-04-23T09:00"
-      const targetStr = `${dateStr}T09:00`;
-      const idx = windTimes.findIndex(t => t === targetStr);
-
-      const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
-      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const dayName  = dayNames[date.getDay()];
-      const dateLabel = `${date.getDate()} ${monthNames[date.getMonth()]}`;
-      const isToday  = dateStr === todayStr;
-
-      if (idx === -1) {
-        // Slot not found — mark as unavailable
-        days.push({ dayName, dateLabel, isToday, noData: true });
-        continue;
-      }
-
-      const speed = Math.round(windSpeeds[idx] ?? 0);
-      const gusts = Math.round(windGusts[idx] ?? 0);
-      const dir   = windDirLabel(windDirs[idx] ?? 0);
-      const wave  = parseFloat((waves[idx] ?? 0).toFixed(1));
-      const swell = parseFloat((swells[idx] ?? 0).toFixed(1));
-
-      // Kite decision thresholds (same as live widget)
-      const kiteReady = STATE.settings.kiteStatus === 'ready';
-      const windOk    = speed >= minWind;
-      const gustsOk   = gusts <= 45;
-      const wavesOk   = wave <= 2.0;
-      const goKite    = kiteReady && windOk && gustsOk && wavesOk;
-
-      // Tide at 09:00 — DNPVN 2026 cosine interpolation (exact harmonic data)
-      let tideInfo = '';
-      if (tideEngine) {
-        const t09 = tideEngine.getTideAtTime(dateStr, '09:00');
-        if (t09) {
-          const { levelStr, trendArrow } = tideEngine.formatTide(t09);
-          tideInfo = `${levelStr} ${trendArrow}`;
-        }
-      }
-
-      // Reason label
-      let reason = '';
-      if (!kiteReady)      reason = 'kites in repair';
-      else if (!windOk)    reason = `wind ${speed}km/h`;
-      else if (!gustsOk)   reason = `gusts ${gusts}km/h`;
-      else if (!wavesOk)   reason = `waves ${wave}m`;
-      else                 reason = `${speed}km/h ${dir}`;
-
-      days.push({ dayName, dateLabel, isToday, goKite, speed, gusts, dir, wave, swell, tideInfo, reason, noData: false });
-    }
-
-    renderForecastStrip(days);
-
-    const now = new Date();
-    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    const el = document.getElementById('forecastUpdated');
-    if (el) el.textContent = `Jo\u00e3o Pessoa \u00b7 09:00 window \u00b7 ${ts}`;
-
-  } catch(e) {
-    console.error('Forecast fetch failed:', e);
-    const el = document.getElementById('forecastUpdated');
-    if (el) el.textContent = 'Forecast unavailable';
-  }
-}
-
-function renderForecastStrip(days) {
-  const tbody = document.getElementById('forecastTbody');
-  if (!tbody) return;
-
-  // Table rows
-  tbody.innerHTML = days.map(d => {
-    if (d.noData) {
-      return `<tr class="forecast-row-nodata">
-        <td class="fc-day">${d.dayName}</td>
-        <td class="fc-date">${d.dateLabel}</td>
-        <td colspan="6" style="color:var(--color-text-faint)">No data</td>
-      </tr>`;
-    }
-    const verdict  = d.goKite ? 'GO KITE' : 'GYM';
-    const vClass   = d.goKite ? 'fc-go' : 'fc-nogo';
-    const todayCls = d.isToday ? ' fc-today' : '';
-    return `<tr class="forecast-row${todayCls}">
-      <td class="fc-day">${d.dayName}${d.isToday ? '<span class="fc-now-dot"></span>' : ''}</td>
-      <td class="fc-date">${d.dateLabel}</td>
-      <td class="fc-verdict ${vClass}">${verdict}</td>
-      <td class="fc-num">${d.speed} <span class="fc-unit">km/h</span></td>
-      <td class="fc-num">${d.gusts} <span class="fc-unit">km/h</span></td>
-      <td class="fc-num">${d.wave} <span class="fc-unit">m</span></td>
-      <td class="fc-num">${d.tideInfo || '—'}</td>
-      <td class="fc-reason">${d.reason}</td>
-    </tr>`;
-  }).join('');
-
-  // Wind bar mini-chart (inline SVG)
-  const chartEl = document.getElementById('forecastWindChart');
-  if (chartEl) {
-    const valid = days.filter(d => !d.noData);
-    const maxSpd = Math.max(...valid.map(d => d.speed), 1);
-    const minThreshold = STATE.settings.minWind || 18;
-    const w = 100 / (days.length || 1);
-    const barsSvg = days.map((d, i) => {
-      if (d.noData) return `<rect x="${i*w+w*0.1}%" y="0" width="${w*0.8}%" height="100%" fill="var(--color-surface-2)" rx="1"/>`;
-      const hPct = Math.max(4, Math.round(d.speed / maxSpd * 100));
-      const fill = d.speed >= minThreshold ? 'var(--color-primary)' : 'var(--color-text-faint)';
-      const top  = 100 - hPct;
-      return `<rect x="${i*w+w*0.1}%" y="${top}%" width="${w*0.8}%" height="${hPct}%" fill="${fill}" rx="1"/>
-        <text x="${i*w+w/2}%" y="97%" text-anchor="middle" font-size="9" font-family="'JetBrains Mono',monospace" fill="var(--color-text-muted)">${d.dayName.slice(0,1)}</text>`;
-    }).join('');
-    const threshPct = 100 - Math.round(minThreshold / maxSpd * 100);
-    chartEl.innerHTML = `
-      <div class="fwc-label">WIND SPEED (km/h) — 09:00 morning · threshold ${minThreshold} km/h</div>
-      <svg class="fwc-svg" viewBox="0 0 700 60" preserveAspectRatio="none">
-        ${barsSvg}
-        <line x1="0" y1="${threshPct}%" x2="100%" y2="${threshPct}%" stroke="var(--color-amber)" stroke-width="1" stroke-dasharray="4 3"/>
-      </svg>`;
-  }
-}
-
-// ── GOOGLE CALENDAR SIMULATION ────────────────────────────────────────────
-// Simulated events — realistic for Eduardo's life as a retired tax auditor + developer
-function buildGCalEvents() {
-  const now = new Date();
-  const h = now.getHours();
-  const m = now.getMinutes();
-
-  // Simulated calendar events for today
-  const events = [
-    {
-      title: 'Morning Physical Block',
-      start: { h: 9, m: 0 }, end: { h: 11, m: 30 },
-      cal: 'Personal', color: '#3db4e8',
-    },
-    {
-      title: 'Dog Training — Parque da Jaqueira',
-      start: { h: 11, m: 30 }, end: { h: 12, m: 15 },
-      cal: 'Personal', color: '#4cc96a',
-    },
-    {
-      title: 'Lunch & Recovery',
-      start: { h: 12, m: 30 }, end: { h: 14, m: 0 },
-      cal: 'Personal', color: '#e8a43d',
-    },
-    {
-      title: 'Deep Work — GMC Dashboard',
-      start: { h: 14, m: 0 }, end: { h: 16, m: 0 },
-      cal: 'AI Projects', color: '#a86fdf',
-    },
-    {
-      title: 'MCP Integration — LM Studio',
-      start: { h: 16, m: 0 }, end: { h: 17, m: 30 },
-      cal: 'AI Projects', color: '#a86fdf',
-    },
-    {
-      title: 'Evening Walk + Dog Training',
-      start: { h: 18, m: 0 }, end: { h: 19, m: 0 },
-      cal: 'Personal', color: '#4cc96a',
-    },
-    {
-      title: 'Dinner',
-      start: { h: 20, m: 0 }, end: { h: 21, m: 0 },
-      cal: 'Personal', color: '#e8a43d',
-    },
-  ];
-
-  const currentMins = h * 60 + m;
-
-  const el = document.getElementById('gcalEvents');
-  el.innerHTML = events.map(ev => {
-    const startMins = ev.start.h * 60 + ev.start.m;
-    const endMins   = ev.end.h   * 60 + ev.end.m;
-    const isDone    = endMins < currentMins;
-    const isNow     = startMins <= currentMins && endMins > currentMins;
-
-    const fmt = (obj) => {
-      const mm = String(obj.m).padStart(2, '0');
-      return `${obj.h}:${mm}`;
-    };
-
-    return `
-      <div class="gcal-event ${isNow ? 'gcal-now' : ''} ${isDone ? 'gcal-done' : ''}">
-        <div class="gcal-event-dot" style="background:${ev.color}"></div>
-        <div class="gcal-event-time">${fmt(ev.start)}</div>
-        <div class="gcal-event-body">
-          <div class="gcal-event-title">${ev.title}${isNow ? ' <span style="color:var(--color-success);font-size:0.65rem;font-weight:700;margin-left:4px;">NOW</span>' : ''}</div>
-          <div class="gcal-event-cal">${ev.cal} · until ${fmt(ev.end)}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  // Update sync badge with realistic timestamp
-  const syncTime = new Date(now - Math.floor(Math.random() * 3 + 1) * 60000);
-  const syncMins = Math.round((now - syncTime) / 60000);
-  document.getElementById('gcalSyncBadge').textContent =
-    syncMins <= 1 ? 'Synced just now' : `Synced ${syncMins}m ago`;
-}
-
-// ── WEEKLY REVIEW ─────────────────────────────────────────────────────────
-// Simulate realistic data for the past 7 days
-// ── HABIT COMPLETION GRID 7×4 ─────────────────────────────────────────────
-// Renders a table: rows = habits (GYM/KIT/MUA/DOG), columns = last 7 days.
-// Each cell = green (done), red (missed), dark (blocked), amber outline (today).
 function buildHabitCompletionGrid(last7, habitHistory) {
   const el = document.getElementById('habitCompletionGrid');
   if (!el) return;

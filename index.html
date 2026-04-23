@@ -72,15 +72,18 @@
       <!-- ROW 1: CONDITIONS + TODAY BLOCK -->
       <div class="grid-row grid-row--top">
 
+        <!-- GO / NO-GO BANNER -->
+        <div class="gng-banner" id="gngBanner" data-state="checking">
+          <div class="gng-verdict" id="gngVerdict">CHECKING</div>
+          <div class="gng-reason" id="gngReason">Reading live conditions…</div>
+          <div class="gng-metrics" id="gngMetrics"></div>
+        </div>
+
         <!-- CONDITIONS WIDGET -->
         <section class="card conditions-card" aria-label="Kite conditions">
           <div class="card-header">
             <h2 class="card-title">Conditions</h2>
             <span class="card-subtitle">João Pessoa · Now</span>
-          </div>
-          <div class="conditions-go-indicator" id="conditionsGo">
-            <div class="go-badge" id="goBadge">—</div>
-            <div class="go-label" id="goLabel">checking…</div>
           </div>
           <!-- Conditions data table -->
           <table class="conditions-table">
@@ -91,13 +94,13 @@
               <tr class="cond-row" id="condRowWind">
                 <td class="cond-param">WIND</td>
                 <td class="cond-val"><span id="windSpeed">—</span></td>
-                <td class="cond-thresh">min 18 km/h</td>
+                <td class="cond-thresh">min <span id="windThreshDisplay">10</span> kt</td>
                 <td class="cond-status" id="condStatusWind">—</td>
               </tr>
               <tr class="cond-row" id="condRowGusts">
                 <td class="cond-param">GUSTS</td>
                 <td class="cond-val"><span id="windGusts">—</span></td>
-                <td class="cond-thresh">max 45 km/h</td>
+                <td class="cond-thresh">max 24 kt</td>
                 <td class="cond-status" id="condStatusGusts">—</td>
               </tr>
               <tr class="cond-row" id="condRowDir">
@@ -109,7 +112,7 @@
               <tr class="cond-row" id="condRowTide">
                 <td class="cond-param">TIDE</td>
                 <td class="cond-val"><span id="tideCurrent">—</span></td>
-                <td class="cond-thresh">DNPVN 2026</td>
+                <td class="cond-thresh">max <span id="tideMaxDisplay">1.6</span>m</td>
                 <td class="cond-status" id="condStatusTide">—</td>
               </tr>
             </tbody>
