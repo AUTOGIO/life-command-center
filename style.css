@@ -1762,3 +1762,123 @@ body::before {
 .hcg-missed  { background: var(--color-error); }
 .hcg-blocked { background: var(--color-surface-offset); border: 1px solid var(--color-border); }
 .hcg-today   { background: transparent; outline: 1.5px solid var(--color-amber); outline-offset: 1px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SHOULDER RECOVERY BAR
+   ══════════════════════════════════════════════════════════════════════════ */
+.shoulder-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--color-error-highlight);
+  border-top: 2px solid var(--color-error);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  padding: 8px var(--space-5);
+  animation: shoulder-pulse 3s ease-in-out infinite;
+}
+@keyframes shoulder-pulse {
+  0%, 100% { border-top-color: var(--color-error); }
+  50%       { border-top-color: var(--color-amber); }
+}
+
+.shoulder-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.shoulder-left {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.shoulder-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-error);
+}
+.shoulder-days {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--color-error);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.shoulder-days-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-error);
+  opacity: 0.7;
+}
+
+/* Progress dots */
+.shoulder-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.shoulder-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.shoulder-dot-done {
+  background: var(--color-success);
+  box-shadow: 0 0 4px var(--color-success);
+}
+.shoulder-dot-left {
+  background: var(--color-error);
+  opacity: 0.6;
+  border: 1px solid var(--color-error);
+}
+
+/* Action buttons */
+.shoulder-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.shoulder-btn {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid;
+}
+.shoulder-btn-minus {
+  color: var(--color-amber);
+  background: var(--color-amber-highlight);
+  border-color: var(--color-amber);
+}
+.shoulder-btn-minus:hover {
+  background: var(--color-amber);
+  color: var(--color-text-inverse);
+}
+.shoulder-btn-healed {
+  color: var(--color-success);
+  background: var(--color-success-highlight);
+  border-color: var(--color-success);
+}
+.shoulder-btn-healed:hover {
+  background: var(--color-success);
+  color: var(--color-text-inverse);
+}
+
+/* Sub-line */
+.shoulder-sub {
+  font-size: 0.62rem;
+  color: var(--color-error);
+  opacity: 0.65;
+  letter-spacing: 0.04em;
+}

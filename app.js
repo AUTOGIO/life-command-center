@@ -168,15 +168,58 @@ const STATE = {
   conditionsOk: null,
 };
 
-// In-memory only — state persists for the browser session via JS memory.
-// For true persistence across refreshes, connect a backend.
+// ── PERSISTENCE (localStorage) ───────────────────────────────────────────────
+const LS_KEY = 'lifeOS_v1';
+
 function restoreState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // Shoulder recovery
+      if (typeof saved.shoulderDaysLeft === 'number') {
+        STATE.settings.shoulderDaysLeft = saved.shoulderDaysLeft;
+      }
+      if (saved.shoulderStartDate) {
+        STATE.settings.shoulderStartDate = saved.shoulderStartDate;
+      }
+      // Kite status
+      if (saved.kiteStatus) STATE.settings.kiteStatus = saved.kiteStatus;
+      // Habits: restore done + streak
+      if (Array.isArray(saved.habits)) {
+        saved.habits.forEach(sh => {
+          const h = STATE.habits.find(h => h.id === sh.id);
+          if (h) { h.streak = sh.streak || 0; }
+        });
+      }
+      // Heatmap
+      if (Array.isArray(saved.heatmap)) STATE.heatmap = saved.heatmap;
+      // Projects
+      if (Array.isArray(saved.projects)) STATE.projects = saved.projects;
+    }
+  } catch(e) { console.warn('restoreState error', e); }
+
+  // Derive blocked states from saved settings
+  const muay = STATE.habits.find(h => h.id === 'muay');
+  if (muay) muay.blocked = STATE.settings.shoulderDaysLeft > 0;
+  const kite = STATE.habits.find(h => h.id === 'kite');
+  if (kite) kite.blocked = STATE.settings.kiteStatus === 'repair';
+
   ensureHeatmap();
 }
 
 function persistState() {
-  // State lives in memory (STATE object) during the session.
-  // No external storage needed.
+  try {
+    const data = {
+      shoulderDaysLeft:  STATE.settings.shoulderDaysLeft,
+      shoulderStartDate: STATE.settings.shoulderStartDate || null,
+      kiteStatus:        STATE.settings.kiteStatus,
+      habits: STATE.habits.map(h => ({ id: h.id, streak: h.streak })),
+      heatmap:  STATE.heatmap,
+      projects: STATE.projects,
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+  } catch(e) { console.warn('persistState error', e); }
 }
 
 // ── HEATMAP INIT ─────────────────────────────────────────────────────────
@@ -275,7 +318,79 @@ function renderSchedule() {
   }).join('');
 }
 
-// ── BLOCKERS / STATUS ──────────────────────────────────────────────────────
+// ── SHOULDER RECOVERY BAR ───────────────────────────────────────────────
+function renderShoulderBar() {
+  const bar      = document.getElementById('shoulderBar');
+  const display  = document.getElementById('shoulderDaysDisplay');
+  const label    = document.getElementById('shoulderDaysLabel');
+  const dotsEl   = document.getElementById('shoulderDots');
+  if (!bar) return;
+
+  const days = STATE.settings.shoulderDaysLeft;
+
+  if (days <= 0) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  display.textContent = days;
+  label.textContent   = days === 1 ? 'day left' : 'days left';
+
+  // Progress dots: filled = remaining, empty = days already recovered
+  const total = STATE.settings.shoulderTotalDays || Math.max(days, 5);
+  const recovered = total - days;
+  dotsEl.innerHTML = Array.from({ length: total }, (_, i) => {
+    const done = i < recovered;
+    return `<span class="shoulder-dot ${done ? 'shoulder-dot-done' : 'shoulder-dot-left'}"></span>`;
+  }).join('');
+}
+
+function initShoulderBar() {
+  // Set total days on first load if not already stored
+  if (!STATE.settings.shoulderTotalDays) {
+    STATE.settings.shoulderTotalDays = STATE.settings.shoulderDaysLeft || 5;
+  }
+
+  renderShoulderBar();
+
+  const btnMinus  = document.getElementById('shoulderMinus');
+  const btnHealed = document.getElementById('shoulderHealed');
+
+  btnMinus?.addEventListener('click', () => {
+    if (STATE.settings.shoulderDaysLeft <= 0) return;
+    STATE.settings.shoulderDaysLeft = Math.max(0, STATE.settings.shoulderDaysLeft - 1);
+    const muay = STATE.habits.find(h => h.id === 'muay');
+    if (muay) muay.blocked = STATE.settings.shoulderDaysLeft > 0;
+    persistState();
+    renderShoulderBar();
+    renderHabits();
+    renderBlockers();
+    updateNudge();
+  });
+
+  btnHealed?.addEventListener('click', () => {
+    STATE.settings.shoulderDaysLeft  = 0;
+    STATE.settings.shoulderTotalDays = 0;
+    const muay = STATE.habits.find(h => h.id === 'muay');
+    if (muay) { muay.blocked = false; }
+    persistState();
+    renderShoulderBar();
+    renderHabits();
+    renderBlockers();
+    updateNudge();
+    // Flash confirmation in nudge bar
+    const txt = document.getElementById('nudgeText');
+    if (txt) {
+      const prev = txt.textContent;
+      txt.textContent = 'Shoulder cleared — Muay Thai is now unblocked!';
+      txt.style.color = 'var(--color-success)';
+      setTimeout(() => { txt.textContent = prev; txt.style.color = ''; updateNudge(); }, 3000);
+    }
+  });
+}
+
+// ── BLOCKERS / STATUS ───────────────────────────────────────────────
 function renderBlockers() {
   const list = document.getElementById('blockerList');
   const s = STATE.settings;
@@ -809,6 +924,7 @@ function init() {
   initProjectForm();
   initNotes();
   initSettings();
+  initShoulderBar();
   // ── DNPVN tide engine — load first so renderTideFromDNPVN() fires immediately
   initTides().then(() => {
     // Refresh tide display every minute (interpolated — no API call)

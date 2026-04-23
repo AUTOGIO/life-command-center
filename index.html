@@ -19,6 +19,23 @@
     <div class="nudge-actions" id="nudgeActions"></div>
   </div>
 
+  <!-- SHOULDER RECOVERY COUNTDOWN (shown only while shoulder days > 0) -->
+  <div class="shoulder-bar" id="shoulderBar" style="display:none">
+    <div class="shoulder-bar-inner">
+      <div class="shoulder-left">
+        <span class="shoulder-label">SHOULDER RECOVERY</span>
+        <span class="shoulder-days" id="shoulderDaysDisplay">—</span>
+        <span class="shoulder-days-label" id="shoulderDaysLabel">days left</span>
+      </div>
+      <div class="shoulder-dots" id="shoulderDots"><!-- Built by JS --></div>
+      <div class="shoulder-actions">
+        <button class="shoulder-btn shoulder-btn-minus" id="shoulderMinus" title="−1 day">− 1 DAY</button>
+        <button class="shoulder-btn shoulder-btn-healed" id="shoulderHealed" title="Mark shoulder as healed">HEALED</button>
+      </div>
+    </div>
+    <div class="shoulder-sub">Muay Thai is blocked until cleared &mdash; tap HEALED to unlock it</div>
+  </div>
+
   <!-- MAIN DASHBOARD -->
   <div class="dashboard">
 
