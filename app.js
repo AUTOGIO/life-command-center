@@ -182,6 +182,12 @@ function restoreState() {
       if (typeof saved.shoulderDaysLeft === 'number') {
         STATE.settings.shoulderDaysLeft = saved.shoulderDaysLeft;
       }
+      if (typeof saved.shoulderTotalDays === 'number') {
+        STATE.settings.shoulderTotalDays = saved.shoulderTotalDays;
+      }
+      if (saved.shoulderLastDecrement) {
+        STATE.settings.shoulderLastDecrement = saved.shoulderLastDecrement;
+      }
       if (saved.shoulderStartDate) {
         STATE.settings.shoulderStartDate = saved.shoulderStartDate;
       }
@@ -213,8 +219,10 @@ function restoreState() {
 function persistState() {
   try {
     const data = {
-      shoulderDaysLeft:  STATE.settings.shoulderDaysLeft,
-      shoulderStartDate: STATE.settings.shoulderStartDate || null,
+      shoulderDaysLeft:      STATE.settings.shoulderDaysLeft,
+      shoulderTotalDays:     STATE.settings.shoulderTotalDays  || 0,
+      shoulderLastDecrement: STATE.settings.shoulderLastDecrement || null,
+      shoulderStartDate:     STATE.settings.shoulderStartDate || null,
       kiteStatus:        STATE.settings.kiteStatus,
       habits: STATE.habits.map(h => ({ id: h.id, streak: h.streak })),
       heatmap:  STATE.heatmap,
@@ -523,11 +531,58 @@ function renderShoulderBar() {
   }).join('');
 }
 
+// ── Auto-decrement at midnight ────────────────────────────────────────
+function decrementShoulderDay() {
+  if (STATE.settings.shoulderDaysLeft <= 0) return;
+
+  const todayKey = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  if (STATE.settings.shoulderLastDecrement === todayKey) return; // already ran today
+
+  STATE.settings.shoulderLastDecrement = todayKey;
+  STATE.settings.shoulderDaysLeft = Math.max(0, STATE.settings.shoulderDaysLeft - 1);
+
+  const muay = STATE.habits.find(h => h.id === 'muay');
+  if (muay) muay.blocked = STATE.settings.shoulderDaysLeft > 0;
+
+  persistState();
+  renderShoulderBar();
+  renderHabits();
+  renderBlockers();
+  updateNudge();
+
+  // Flash nudge bar when it hits zero
+  if (STATE.settings.shoulderDaysLeft === 0) {
+    const txt = document.getElementById('nudgeText');
+    if (txt) {
+      const prev = txt.textContent;
+      txt.textContent = 'Shoulder recovery complete — Muay Thai is now available!';
+      txt.style.color = 'var(--color-success)';
+      setTimeout(() => { txt.textContent = prev; txt.style.color = ''; updateNudge(); }, 4000);
+    }
+  }
+}
+
+function scheduleMidnightTick() {
+  const now       = new Date();
+  const tomorrow  = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5); // 00:00:05
+  const msUntil   = tomorrow.getTime() - now.getTime();
+
+  setTimeout(() => {
+    decrementShoulderDay();
+    scheduleMidnightTick(); // reschedule for next midnight
+  }, msUntil);
+}
+
 function initShoulderBar() {
   // Set total days on first load if not already stored
   if (!STATE.settings.shoulderTotalDays) {
     STATE.settings.shoulderTotalDays = STATE.settings.shoulderDaysLeft || 5;
   }
+
+  // Catch up: if app was closed overnight, decrement for today
+  decrementShoulderDay();
+  // Schedule future midnight ticks
+  scheduleMidnightTick();
 
   renderShoulderBar();
 
