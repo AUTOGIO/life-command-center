@@ -172,6 +172,32 @@
           <div class="conditions-updated" id="conditionsUpdated">—</div>
         </section>
 
+        <!-- 48H WIND FORECAST CHART -->
+        <section class="card wind-chart-card" aria-label="48-hour wind forecast">
+          <div class="card-header">
+            <h2 class="card-title">Wind Forecast</h2>
+            <span class="card-subtitle">Next 48h — João Pessoa kite spot</span>
+          </div>
+          <div class="wfc-wrap">
+            <svg class="wfc-svg" id="windChartSvg" viewBox="0 0 700 100" preserveAspectRatio="none">
+              <text x="350" y="55" text-anchor="middle" fill="#444" font-size="11" font-family="monospace">Loading…</text>
+            </svg>
+            <div class="wfc-x-axis" id="windChartXAxis"></div>
+          </div>
+          <div class="wfc-legend">
+            <span class="wfc-swatch wfc-swatch-wind"></span><span>Wind</span>
+            <span class="wfc-swatch wfc-swatch-gusts"></span><span>Gusts</span>
+            <span class="wfc-swatch wfc-swatch-thresh"></span><span>Kite min (18 km/h)</span>
+            <div style="flex:1"></div>
+            <span class="wfc-peak" id="wfcPeakLabel">—</span>
+          </div>
+          <!-- Kite windows table: hours where wind ≥ threshold -->
+          <div class="wfc-windows-wrap">
+            <div class="wfc-windows-title">KITE WINDOWS (wind ≥ <span id="wfcThreshLabel">18</span> km/h)</div>
+            <div class="wfc-windows-list" id="wfcWindowsList">—</div>
+          </div>
+        </section>
+
         <!-- TODAY BLOCK -->
         <section class="card today-card" aria-label="Today's schedule">
           <div class="card-header">

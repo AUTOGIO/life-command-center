@@ -318,6 +318,181 @@ function renderSchedule() {
   }).join('');
 }
 
+// ── 48H WIND FORECAST CHART ───────────────────────────────────────────
+let windChartData = null; // cached 48h data
+
+async function fetch48hWind() {
+  const { lat, lon } = STATE.settings;
+  const url = `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m` +
+    `&wind_speed_unit=kmh&forecast_hours=48` +
+    `&timezone=America%2FFortaleza`;
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    windChartData = {
+      times:  data.hourly.time,
+      speeds: data.hourly.wind_speed_10m,
+      gusts:  data.hourly.wind_gusts_10m,
+      dirs:   data.hourly.wind_direction_10m,
+    };
+    buildWindChart();
+  } catch(e) {
+    console.warn('[wind-chart] fetch error', e);
+  }
+}
+
+function buildWindChart() {
+  const d = windChartData;
+  if (!d) return;
+  const svg    = document.getElementById('windChartSvg');
+  const xAxis  = document.getElementById('windChartXAxis');
+  const peakEl = document.getElementById('wfcPeakLabel');
+  const winEl  = document.getElementById('wfcWindowsList');
+  const thrEl  = document.getElementById('wfcThreshLabel');
+  if (!svg) return;
+
+  const W = 700, H = 100, PAD_T = 10, PAD_B = 14, PAD_L = 0, PAD_R = 0;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+  const n     = d.times.length;
+  const minWind = STATE.settings.minWind || 18;
+  if (thrEl) thrEl.textContent = minWind;
+
+  const maxVal = Math.max(Math.max(...d.gusts), minWind + 10, 40);
+
+  // Find the NOW index
+  const nowStr  = (() => {
+    const t = new Date();
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}T${String(t.getHours()).padStart(2,'0')}:00`;
+  })();
+  const nowIdx  = d.times.findIndex(t => t === nowStr);
+  const nowFrac = nowIdx >= 0 ? nowIdx / (n - 1) : 0;
+  const nowX    = (PAD_L + nowFrac * plotW).toFixed(1);
+
+  // Scale helpers
+  const xOf = i => (PAD_L + (i / (n - 1)) * plotW).toFixed(2);
+  const yOf = v => (PAD_T + plotH - Math.min(v / maxVal, 1) * plotH).toFixed(2);
+
+  // Build SVG paths
+  // Gusts area (below gusts line, filled)
+  const gustArea = d.gusts.map((g, i) => `${xOf(i)},${yOf(g)}`).join(' ');
+  const gustPoly = `${xOf(0)},${yOf(0)} ${gustArea} ${xOf(n-1)},${yOf(0)}`;
+
+  // Wind speed line
+  const windLine = d.speeds.map((s, i) => `${xOf(i)},${yOf(s)}`).join(' ');
+  const windArea = `${xOf(0)},${yOf(0)} ${windLine} ${xOf(n-1)},${yOf(0)}`;
+
+  // Threshold line Y
+  const threshY = parseFloat(yOf(minWind)).toFixed(2);
+
+  // Kite window bands: contiguous runs where speed >= minWind
+  const windows = [];
+  let wStart = null;
+  d.speeds.forEach((s, i) => {
+    if (s >= minWind && wStart === null) wStart = i;
+    else if (s < minWind && wStart !== null) { windows.push([wStart, i - 1]); wStart = null; }
+  });
+  if (wStart !== null) windows.push([wStart, n - 1]);
+
+  // Kite window highlight rects
+  const windowRects = windows.map(([s, e]) => {
+    const x1 = parseFloat(xOf(s));
+    const x2 = parseFloat(xOf(e));
+    return `<rect x="${x1}" y="${PAD_T}" width="${(x2 - x1).toFixed(1)}" height="${plotH}" fill="var(--color-success)" fill-opacity="0.10" rx="1"/>`;
+  }).join('');
+
+  // X-axis labels every 6 hours
+  const xLabels = [];
+  for (let i = 0; i < n; i += 6) {
+    const t   = d.times[i];
+    const hh  = t.slice(11, 16); // "HH:00"
+    const day = t.slice(5, 10).replace('-', '/');
+    const x   = parseFloat(xOf(i));
+    xLabels.push({ x, hh, day, i });
+  }
+
+  // Peak wind info
+  const peakSpeed = Math.max(...d.speeds);
+  const peakIdx   = d.speeds.indexOf(peakSpeed);
+  const peakTime  = d.times[peakIdx]?.slice(11, 16) ?? '--:--';
+  const peakDay   = d.times[peakIdx]?.slice(5, 10).replace('-', '/') ?? '';
+  if (peakEl) {
+    peakEl.textContent = `Peak ${Math.round(peakSpeed)} km/h at ${peakTime} ${peakDay}`;
+    peakEl.style.color = peakSpeed >= minWind ? 'var(--color-success)' : 'var(--color-text-muted)';
+  }
+
+  // Wind direction labels at peak and now
+  const dirLabel = (deg) => {
+    const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+    return dirs[Math.round(deg / 45) % 8];
+  };
+
+  // Value labels at peak
+  const peakX = parseFloat(xOf(peakIdx));
+  const peakY = parseFloat(yOf(peakSpeed));
+
+  svg.innerHTML = `
+    <!-- Kite window bands -->
+    ${windowRects}
+    <!-- Gust area -->
+    <polygon points="${gustPoly}" fill="var(--color-error)" fill-opacity="0.10"/>
+    <polyline points="${gustArea}" fill="none" stroke="var(--color-error)" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="3 2"/>
+    <!-- Wind area fill -->
+    <polygon points="${windArea}" fill="var(--color-primary)" fill-opacity="0.15"/>
+    <!-- Wind speed line -->
+    <polyline points="${windLine}" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- Threshold line -->
+    <line x1="${PAD_L}" y1="${threshY}" x2="${W - PAD_R}" y2="${threshY}"
+      stroke="var(--color-amber)" stroke-width="1" stroke-dasharray="5 3"/>
+    <text x="4" y="${(parseFloat(threshY) - 2).toFixed(1)}" font-size="7" fill="var(--color-amber)" font-family="'JetBrains Mono',monospace" font-weight="700">${minWind}</text>
+    <!-- NOW marker -->
+    <line x1="${nowX}" y1="${PAD_T}" x2="${nowX}" y2="${H - PAD_B}"
+      stroke="var(--color-amber)" stroke-width="1.5"/>
+    <text x="${(parseFloat(nowX) + 3).toFixed(1)}" y="${PAD_T + 7}" font-size="7"
+      fill="var(--color-amber)" font-family="'JetBrains Mono',monospace" font-weight="700">NOW</text>
+    <!-- Peak label -->
+    ${peakSpeed >= 1 ? `<circle cx="${peakX}" cy="${peakY}" r="3" fill="var(--color-primary)"/>
+    <text x="${peakX}" y="${(peakY - 5).toFixed(1)}" text-anchor="middle" font-size="7.5"
+      fill="var(--color-primary)" font-family="'JetBrains Mono',monospace" font-weight="800">${Math.round(peakSpeed)}</text>` : ''}
+    <!-- Baseline -->
+    <line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W}" y2="${H - PAD_B}" stroke="var(--color-border)" stroke-width="0.5"/>
+  `;
+
+  // X-axis DOM labels
+  if (xAxis) {
+    xAxis.innerHTML = '';
+    xLabels.forEach(({ x, hh, day }) => {
+      const span = document.createElement('span');
+      span.className = 'wfc-x-label';
+      span.style.left = ((x / W) * 100).toFixed(2) + '%';
+      const midnight = hh === '00:00';
+      span.innerHTML = midnight
+        ? `<span class="wfc-x-date">${day}</span>`
+        : `<span class="wfc-x-hour">${hh}</span>`;
+      xAxis.appendChild(span);
+    });
+  }
+
+  // Kite windows list
+  if (winEl) {
+    if (!windows.length) {
+      winEl.textContent = 'No kite windows in next 48h';
+      winEl.style.color = 'var(--color-text-muted)';
+    } else {
+      winEl.innerHTML = windows.map(([s, e]) => {
+        const tStart = d.times[s]?.slice(11, 16) ?? '--';
+        const tEnd   = d.times[e]?.slice(11, 16) ?? '--';
+        const day    = d.times[s]?.slice(5, 10).replace('-', '/') ?? '';
+        const maxSpd = Math.max(...d.speeds.slice(s, e + 1));
+        const col    = maxSpd >= minWind + 10 ? 'var(--color-success)' : 'var(--color-amber)';
+        return `<span class="wfc-window-badge" style="border-color:${col};color:${col}">${day} ${tStart}&ndash;${tEnd} <span style="opacity:0.7">${Math.round(maxSpd)}km/h</span></span>`;
+      }).join('');
+    }
+  }
+}
+
 // ── SHOULDER RECOVERY BAR ───────────────────────────────────────────────
 function renderShoulderBar() {
   const bar      = document.getElementById('shoulderBar');
@@ -933,7 +1108,9 @@ function init() {
   fetchConditions();
   setInterval(fetchConditions, 10 * 60 * 1000); // refresh every 10 min
   fetchForecast();
-  setInterval(fetchForecast, 60 * 60 * 1000); // forecast refreshes hourly
+  setInterval(fetchForecast, 60 * 60 * 1000);   // forecast refreshes hourly
+  fetch48hWind();
+  setInterval(fetch48hWind, 60 * 60 * 1000);     // wind chart refreshes hourly
   updateNudge();
   setInterval(updateNudge, 5 * 60 * 1000);
 }
