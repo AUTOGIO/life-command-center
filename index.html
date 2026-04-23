@@ -14,7 +14,7 @@
 
   <!-- NUDGE BAR -->
   <div class="nudge-bar" id="nudgeBar">
-    <div class="nudge-icon" id="nudgeIcon">⚡</div>
+    <div class="nudge-icon" id="nudgeIcon">&gt;</div>
     <div class="nudge-text" id="nudgeText">Loading your day…</div>
     <div class="nudge-actions" id="nudgeActions"></div>
   </div>
@@ -58,15 +58,18 @@
           <h2 class="card-title">7-Day Kite Forecast</h2>
           <span class="card-subtitle" id="forecastUpdated">João Pessoa · 09:00 morning window</span>
         </div>
-        <div class="forecast-strip" id="forecastStrip">
-          <!-- Built by JS -->
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
-          <div class="forecast-day loading"><div class="forecast-day-name">—</div><div class="forecast-icon">·</div><div class="forecast-verdict">…</div></div>
+        <div class="forecast-table-wrap" id="forecastStrip">
+          <table class="forecast-table">
+            <thead><tr>
+              <th>DAY</th><th>DATE</th><th>DECISION</th>
+              <th>WIND</th><th>GUSTS</th><th>WAVE</th><th>TIDE 09:00</th><th>NOTE</th>
+            </tr></thead>
+            <tbody id="forecastTbody">
+              <tr><td colspan="8" style="text-align:center;color:var(--color-text-muted);padding:1rem 0">Loading forecast…</td></tr>
+            </tbody>
+          </table>
+          <!-- Wind bar mini-chart (7 days) built by JS -->
+          <div class="forecast-wind-chart" id="forecastWindChart"></div>
         </div>
       </section>
 
@@ -83,36 +86,58 @@
             <div class="go-badge" id="goBadge">—</div>
             <div class="go-label" id="goLabel">checking…</div>
           </div>
-          <div class="conditions-grid">
-            <div class="condition-item">
-              <div class="condition-icon">💨</div>
-              <div class="condition-value" id="windSpeed">—</div>
-              <div class="condition-label">Wind (km/h)</div>
-            </div>
-            <div class="condition-item">
-              <div class="condition-icon">💥</div>
-              <div class="condition-value" id="windGusts">—</div>
-              <div class="condition-label">Gusts (km/h)</div>
-            </div>
-            <div class="condition-item">
-              <div class="condition-icon">🧭</div>
-              <div class="condition-value" id="windDir">—</div>
-              <div class="condition-label">Direction</div>
-            </div>
-            <div class="condition-item">
-              <div class="condition-icon">🌊</div>
-              <div class="condition-value" id="waveHeight">—</div>
-              <div class="condition-label">Wave (m)</div>
-            </div>
-            <div class="condition-item">
-              <div class="condition-icon">〰️</div>
-              <div class="condition-value" id="swellHeight">—</div>
-              <div class="condition-label">Swell (m)</div>
-            </div>
-            <div class="condition-item">
-              <div class="condition-icon">🌡️</div>
-              <div class="condition-value" id="tideCurrent">—</div>
-              <div class="condition-label">Tide level</div>
+          <!-- Conditions data table -->
+          <table class="conditions-table">
+            <thead>
+              <tr><th>PARAM</th><th>VALUE</th><th>LIMIT</th><th>STATUS</th></tr>
+            </thead>
+            <tbody>
+              <tr class="cond-row" id="condRowWind">
+                <td class="cond-param">WIND</td>
+                <td class="cond-val"><span id="windSpeed">—</span></td>
+                <td class="cond-thresh">min 18 km/h</td>
+                <td class="cond-status" id="condStatusWind">—</td>
+              </tr>
+              <tr class="cond-row" id="condRowGusts">
+                <td class="cond-param">GUSTS</td>
+                <td class="cond-val"><span id="windGusts">—</span></td>
+                <td class="cond-thresh">max 45 km/h</td>
+                <td class="cond-status" id="condStatusGusts">—</td>
+              </tr>
+              <tr class="cond-row" id="condRowDir">
+                <td class="cond-param">DIR</td>
+                <td class="cond-val"><span id="windDir">—</span></td>
+                <td class="cond-thresh">—</td>
+                <td class="cond-status" id="condStatusDir">—</td>
+              </tr>
+              <tr class="cond-row" id="condRowWave">
+                <td class="cond-param">WAVE</td>
+                <td class="cond-val"><span id="waveHeight">—</span></td>
+                <td class="cond-thresh">max 2.0 m</td>
+                <td class="cond-status" id="condStatusWave">—</td>
+              </tr>
+              <tr class="cond-row" id="condRowSwell">
+                <td class="cond-param">SWELL</td>
+                <td class="cond-val"><span id="swellHeight">—</span></td>
+                <td class="cond-thresh">info</td>
+                <td class="cond-status" id="condStatusSwell">—</td>
+              </tr>
+              <tr class="cond-row" id="condRowTide">
+                <td class="cond-param">TIDE</td>
+                <td class="cond-val"><span id="tideCurrent">—</span></td>
+                <td class="cond-thresh">DNPVN 2026</td>
+                <td class="cond-status" id="condStatusTide">—</td>
+              </tr>
+            </tbody>
+          </table>
+          <!-- Tide SVG curve (built by JS) -->
+          <div class="tide-curve-wrap">
+            <div class="tide-curve-label">TODAY — TIDE CURVE</div>
+            <svg class="tide-curve-svg" id="tideCurveSvg" viewBox="0 0 300 60" preserveAspectRatio="none">
+              <text x="150" y="35" text-anchor="middle" fill="#444" font-size="10" font-family="monospace">Loading…</text>
+            </svg>
+            <div class="tide-curve-axis">
+              <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
             </div>
           </div>
           <!-- Tide trend bar -->
@@ -159,11 +184,11 @@
           </div>
           <div class="status-section-title">Mood</div>
           <div class="mood-selector" id="moodSelector">
-            <button class="mood-btn" data-mood="🔥" title="On fire">🔥</button>
-            <button class="mood-btn" data-mood="💪" title="Good">💪</button>
-            <button class="mood-btn" data-mood="😐" title="Neutral">😐</button>
-            <button class="mood-btn" data-mood="😴" title="Low energy">😴</button>
-            <button class="mood-btn" data-mood="🤕" title="Not great">🤕</button>
+            <button class="mood-btn" data-mood="FIRE" title="On fire">FIRE</button>
+            <button class="mood-btn" data-mood="GOOD" title="Good">GOOD</button>
+            <button class="mood-btn" data-mood="OK" title="Neutral">OK</button>
+            <button class="mood-btn" data-mood="LOW" title="Low energy">LOW</button>
+            <button class="mood-btn" data-mood="HURT" title="Not great">HURT</button>
           </div>
         </section>
 

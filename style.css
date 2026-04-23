@@ -9,49 +9,49 @@
 
 /* ── DESIGN TOKENS ── */
 :root {
-  /* Base: deep navy/charcoal */
-  --color-bg:            #080c10;
-  --color-surface:       #0d1117;
-  --color-surface-2:     #111820;
-  --color-surface-offset:#0a0f15;
-  --color-border:        #1e2d3d;
-  --color-border-bright: #2e4a66;
-  --color-divider:       #162030;
+  /* Base: pure black */
+  --color-bg:            #000000;
+  --color-surface:       #0a0a0a;
+  --color-surface-2:     #111111;
+  --color-surface-offset:#080808;
+  --color-border:        #222222;
+  --color-border-bright: #333333;
+  --color-divider:       #1a1a1a;
 
   /* Text */
-  --color-text:          #c9d8e8;
-  --color-text-muted:    #5a7a96;
-  --color-text-faint:    #2a3d50;
-  --color-text-inverse:  #080c10;
+  --color-text:          #e8e8e8;
+  --color-text-muted:    #666666;
+  --color-text-faint:    #2a2a2a;
+  --color-text-inverse:  #000000;
 
-  /* Accent: Cyan (primary) */
-  --color-primary:           #00d4ff;
-  --color-primary-dim:       #0099bb;
-  --color-primary-hover:     #33ddff;
-  --color-primary-highlight: #001f2e;
+  /* Primary: Electric Blue */
+  --color-primary:           #1e90ff;
+  --color-primary-dim:       #1060cc;
+  --color-primary-hover:     #50aaff;
+  --color-primary-highlight: #001833;
 
-  /* Amber (secondary / warnings) */
-  --color-amber:           #ffb800;
-  --color-amber-dim:       #cc9200;
-  --color-amber-highlight: #1f1600;
+  /* Amber → Yellow (secondary / warnings) */
+  --color-amber:           #f5c800;
+  --color-amber-dim:       #c9a000;
+  --color-amber-highlight: #1e1700;
 
-  /* Neon green (GO / success) */
-  --color-success:           #00ff88;
-  --color-success-dim:       #00bb66;
-  --color-success-highlight: #001a0e;
+  /* Green (GO / success) */
+  --color-success:           #00e060;
+  --color-success-dim:       #00aa44;
+  --color-success-highlight: #001a0b;
 
   /* Red (NOGO / error) */
-  --color-error:           #ff3366;
-  --color-error-dim:       #cc1144;
-  --color-error-highlight: #200010;
+  --color-error:           #ff2233;
+  --color-error-dim:       #cc0011;
+  --color-error-highlight: #1a0005;
 
   /* Kite specific */
-  --color-kite-go:   #00ff88;
-  --color-kite-nogo: #ff3366;
-  --color-kite-warn: #ffb800;
+  --color-kite-go:   #00e060;
+  --color-kite-nogo: #ff2233;
+  --color-kite-warn: #f5c800;
 
-  /* Purple (AI / projects) */
-  --color-purple:    #b06aff;
+  /* Blue accent (AI / projects) */
+  --color-purple:    #1e90ff;
 
   /* Geometry */
   --radius-sm:   2px;
@@ -61,9 +61,9 @@
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm:  0 0 8px rgba(0, 212, 255, 0.05);
-  --shadow-md:  0 0 20px rgba(0, 212, 255, 0.08);
-  --shadow-glow:0 0 24px rgba(0, 212, 255, 0.18);
+  --shadow-sm:  0 0 8px rgba(30, 144, 255, 0.06);
+  --shadow-md:  0 0 20px rgba(30, 144, 255, 0.10);
+  --shadow-glow:0 0 24px rgba(30, 144, 255, 0.22);
 
   --transition: 140ms cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -97,28 +97,28 @@
   --color-border-bright: #7a9ab8;
   --color-divider:       #c8d4e0;
   --color-text:          #1a2535;
-  --color-text-muted:    #4a6480;
-  --color-text-faint:    #9aafca;
-  --color-text-inverse:  #f0f4f8;
-  --color-primary:           #0088cc;
-  --color-primary-dim:       #006699;
-  --color-primary-hover:     #0099ee;
-  --color-primary-highlight: #d0eaf8;
-  --color-amber:             #cc8800;
-  --color-amber-dim:         #aa6600;
-  --color-amber-highlight:   #fff0cc;
-  --color-success:           #00aa55;
-  --color-success-dim:       #008844;
-  --color-success-highlight: #ccf0e0;
-  --color-error:             #cc0033;
-  --color-error-dim:         #aa0022;
-  --color-error-highlight:   #ffe0e8;
-  --color-kite-go:   #00aa55;
-  --color-kite-nogo: #cc0033;
-  --color-purple:    #7722cc;
+  --color-text-muted:    #444444;
+  --color-text-faint:    #aaaaaa;
+  --color-text-inverse:  #ffffff;
+  --color-primary:           #0055cc;
+  --color-primary-dim:       #003fa8;
+  --color-primary-hover:     #1e70ee;
+  --color-primary-highlight: #d0e4ff;
+  --color-amber:             #c89000;
+  --color-amber-dim:         #a07000;
+  --color-amber-highlight:   #fff4cc;
+  --color-success:           #008833;
+  --color-success-dim:       #006622;
+  --color-success-highlight: #ccf0dc;
+  --color-error:             #cc0011;
+  --color-error-dim:         #aa0008;
+  --color-error-highlight:   #ffe0e4;
+  --color-kite-go:   #008833;
+  --color-kite-nogo: #cc0011;
+  --color-purple:    #0055cc;
   --shadow-sm:  0 1px 4px rgba(0,0,0,0.1);
   --shadow-md:  0 4px 12px rgba(0,0,0,0.12);
-  --shadow-glow:0 0 16px rgba(0,136,204,0.15);
+  --shadow-glow:0 0 16px rgba(0,85,204,0.15);
 }
 
 /* ── BASE RESET ── */
@@ -1362,3 +1362,241 @@ body::before {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONDITIONS TABLE
+   ══════════════════════════════════════════════════════════════════════════ */
+.conditions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+  margin: var(--space-3) 0;
+  table-layout: fixed;
+}
+.conditions-table th {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  padding: 3px 6px 4px;
+  text-align: left;
+}
+.conditions-table th:nth-child(2),
+.conditions-table th:nth-child(3),
+.conditions-table th:nth-child(4) { text-align: center; }
+
+.cond-row td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle;
+}
+.cond-row:last-child td { border-bottom: none; }
+.cond-param {
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.cond-val {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+}
+.cond-thresh {
+  font-size: 0.65rem;
+  color: var(--color-text-faint);
+  text-align: center;
+}
+.cond-status {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.cond-ok   { color: var(--color-success);  background: var(--color-success-highlight); }
+.cond-fail { color: var(--color-error);    background: var(--color-error-highlight); }
+.cond-info { color: var(--color-amber);    background: var(--color-amber-highlight); }
+
+/* Tide curve */
+.tide-curve-wrap {
+  margin-top: var(--space-3);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+.tide-curve-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.tide-curve-svg {
+  width: 100%;
+  height: 60px;
+  display: block;
+}
+.tide-curve-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.60rem;
+  color: var(--color-text-faint);
+  margin-top: 2px;
+  padding: 0 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FORECAST TABLE
+   ══════════════════════════════════════════════════════════════════════════ */
+.forecast-table-wrap {
+  width: 100%;
+}
+.forecast-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+  table-layout: auto;
+}
+.forecast-table thead th {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border-bright);
+  padding: 4px 8px 5px;
+  text-align: left;
+  white-space: nowrap;
+}
+.forecast-table thead th:nth-child(n+4) { text-align: center; }
+
+.forecast-row td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle;
+}
+.forecast-row:last-child td { border-bottom: none; }
+.forecast-row.fc-today { background: var(--color-primary-highlight); }
+.forecast-row.fc-today .fc-day { color: var(--color-primary); font-weight: 800; }
+
+.fc-day {
+  font-weight: 700;
+  font-size: 0.70rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  position: relative;
+}
+.fc-now-dot {
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: pulse-dot 2s infinite;
+}
+.fc-date {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.fc-verdict {
+  font-weight: 800;
+  font-size: 0.70rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.fc-go   { color: var(--color-success); background: var(--color-success-highlight); }
+.fc-nogo { color: var(--color-error);   background: var(--color-error-highlight); }
+.fc-num {
+  text-align: center;
+  font-weight: 600;
+  font-size: var(--text-xs);
+}
+.fc-unit {
+  font-size: 0.60rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+.fc-reason {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.forecast-row-nodata td {
+  padding: 4px 8px;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+/* Wind bar mini-chart below table */
+.forecast-wind-chart { margin-top: var(--space-3); }
+.fwc-label {
+  font-size: 0.60rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.fwc-svg {
+  width: 100%;
+  height: 44px;
+  display: block;
+  overflow: visible;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HABIT TAG (replaces emoji)
+   ══════════════════════════════════════════════════════════════════════════ */
+.habit-tag {
+  font-size: 0.60rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+  background: var(--color-primary-highlight);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  text-align: center;
+  min-width: 28px;
+  flex-shrink: 0;
+}
+.habit-item.blocked .habit-tag {
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+}
+.habit-item.done .habit-tag {
+  color: var(--color-success);
+  background: var(--color-success-highlight);
+  border-color: var(--color-success);
+}
+
+/* Mood buttons — text style */
+.mood-btn {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.mood-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.mood-btn.selected { border-color: var(--color-amber); color: var(--color-amber); background: var(--color-amber-highlight); }

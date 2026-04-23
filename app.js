@@ -52,6 +52,88 @@ function renderTideFromDNPVN() {
 
   STATE.tides = { level: result.height, trend: result.trend,
                   rising: result.trend === 'rising', source: 'DNPVN' };
+
+  // ── Tide status column in conditions table
+  const tideStatusEl = document.getElementById('condStatusTide');
+  if (tideStatusEl) {
+    tideStatusEl.textContent = `${levelStr} ${trendArrow}`;
+    tideStatusEl.className = 'cond-status cond-info';
+  }
+
+  // ── Rebuild tide curve SVG
+  buildTideCurve();
+}
+
+function buildTideCurve() {
+  if (!tideEngine) return;
+  const svg = document.getElementById('tideCurveSvg');
+  if (!svg) return;
+
+  const now = new Date();
+  const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const todayEvts = tideEngine.getEventsForDate(ymd);
+  if (!todayEvts || !todayEvts.length) return;
+
+  const heights = todayEvts.map(e => e.height);
+  const minH = Math.min(...heights);
+  const maxH = Math.max(...heights);
+  const range = maxH - minH || 1;
+
+  const W = 300, H = 60, PAD_T = 8, PAD_B = 10;
+  const plotH = H - PAD_T - PAD_B;
+  const dayStart = new Date(`${ymd}T00:00:00-03:00`).getTime();
+
+  // Sample every 30 min — 48 points
+  const pts = [];
+  for (let i = 0; i <= 48; i++) {
+    const ms = dayStart + i * 30 * 60 * 1000;
+    const r  = tideEngine.getTideAt(ms);
+    if (!r) continue;
+    const x = (i / 48) * W;
+    const y = PAD_T + plotH - ((r.level - minH) / range) * plotH;
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+
+  // Current time marker
+  const nowFrac = Math.max(0, Math.min(1, (Date.now() - dayStart) / 86400000));
+  const nowX    = (nowFrac * W).toFixed(1);
+  const nowY    = (() => {
+    const r = tideEngine.getTideAt(Date.now());
+    if (!r) return ((H - PAD_B) / 2).toFixed(1);
+    return (PAD_T + plotH - ((r.level - minH) / range) * plotH).toFixed(1);
+  })();
+
+  const yLo = (H - PAD_B).toFixed(1);
+  const yHi = PAD_T.toFixed(1);
+
+  // High/Low labels on curve
+  const extremeLabels = todayEvts.map(ev => {
+    const iso = ev.iso;
+    const t   = new Date(iso + '-03:00');
+    const fracT = (t.getTime() - dayStart) / 86400000;
+    const x = (fracT * W).toFixed(1);
+    const y = PAD_T + plotH - ((ev.height - minH) / range) * plotH;
+    const labelY = ev.type === 'H' ? (y - 4).toFixed(1) : (y + 9).toFixed(1);
+    const anchor = fracT < 0.1 ? 'start' : fracT > 0.9 ? 'end' : 'middle';
+    return `<text x="${x}" y="${labelY}" text-anchor="${anchor}" font-size="6.5"
+      fill="var(--color-amber)" font-family="'JetBrains Mono',monospace" font-weight="700">
+      ${ev.type === 'H' ? 'H' : 'L'} ${ev.height.toFixed(2)}m
+    </text>`;
+  }).join('');
+
+  svg.innerHTML = `
+    <line x1="0" y1="${yLo}" x2="${W}" y2="${yLo}" stroke="var(--color-border)" stroke-width="0.5"/>
+    <line x1="${W*0.25}" y1="${PAD_T}" x2="${W*0.25}" y2="${yLo}" stroke="var(--color-border)" stroke-width="0.4" stroke-dasharray="2 2"/>
+    <line x1="${W*0.5}"  y1="${PAD_T}" x2="${W*0.5}"  y2="${yLo}" stroke="var(--color-border)" stroke-width="0.4" stroke-dasharray="2 2"/>
+    <line x1="${W*0.75}" y1="${PAD_T}" x2="${W*0.75}" y2="${yLo}" stroke="var(--color-border)" stroke-width="0.4" stroke-dasharray="2 2"/>
+    <polygon points="0,${yLo} ${pts.join(' ')} ${W},${yLo}" fill="var(--color-primary)" fill-opacity="0.12"/>
+    <polyline points="${pts.join(' ')}" fill="none" stroke="var(--color-primary)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <line x1="${nowX}" y1="${PAD_T}" x2="${nowX}" y2="${yLo}" stroke="var(--color-amber)" stroke-width="1.5"/>
+    <circle cx="${nowX}" cy="${nowY}" r="2.5" fill="var(--color-amber)"/>
+    ${extremeLabels}
+    <text x="2" y="${PAD_T}" dominant-baseline="hanging" font-size="6.5" fill="var(--color-text-muted)" font-family="'JetBrains Mono',monospace">${maxH.toFixed(1)}m</text>
+    <text x="2" y="${yLo}" dominant-baseline="auto" font-size="6.5" fill="var(--color-text-muted)" font-family="'JetBrains Mono',monospace">${minH.toFixed(1)}m</text>
+  `;
 }
 
 // ── STATE ──────────────────────────────────────────────────────────────────
@@ -288,10 +370,10 @@ function renderHabits() {
     <div class="habit-item ${h.done ? 'done' : ''} ${h.blocked ? 'blocked' : ''}"
          data-habit-id="${h.id}"
          title="${h.blocked ? 'Currently blocked' : (h.done ? 'Done! Click to undo' : 'Click to mark done')}">
-      <div class="habit-emoji">${h.emoji}</div>
+      <div class="habit-tag">${h.tag || h.name.slice(0,3).toUpperCase()}</div>
       <div class="habit-name">${h.name}</div>
       <div class="habit-streak ${h.streak >= 3 ? 'hot' : ''}">
-        ${h.streak > 0 ? `🔥 ${h.streak}-day streak` : (h.blocked ? '🔒 Blocked' : 'Not started')}
+        ${h.streak > 0 ? `${h.streak}d streak` : (h.blocked ? 'BLOCKED' : '—')}
       </div>
       <div class="habit-check">${h.done ? '✓' : ''}</div>
     </div>
@@ -483,8 +565,8 @@ async function fetchConditions() {
     const dir    = windDirLabel(dirDeg);
     const temp   = Math.round(w.temperature_2m);
 
-    document.getElementById('windSpeed').textContent = speed;
-    document.getElementById('windGusts').textContent = gusts;
+    document.getElementById('windSpeed').textContent = `${speed} km/h`;
+    document.getElementById('windGusts').textContent = `${gusts} km/h`;
     document.getElementById('windDir').textContent   = dir;
 
     // ── Waves (Open-Meteo Marine — no tide fields needed) ──
@@ -494,8 +576,21 @@ async function fetchConditions() {
     const swellDir = windDirLabel(m.swell_wave_direction);
     const swellPer = m.swell_wave_period.toFixed(0);
 
-    document.getElementById('waveHeight').textContent  = waveH;
-    document.getElementById('swellHeight').textContent = swellH;
+    document.getElementById('waveHeight').textContent  = `${waveH} m`;
+    document.getElementById('swellHeight').textContent = `${swellH} m`;
+
+    // ── Conditions table status column ──
+    function setCondStatus(id, ok, text) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent  = text;
+      el.className    = 'cond-status ' + (ok === true ? 'cond-ok' : ok === false ? 'cond-fail' : 'cond-info');
+    }
+    setCondStatus('condStatusWind',  speed >= minWind,          speed >= minWind ? 'OK' : 'LOW');
+    setCondStatus('condStatusGusts', gusts <= 45,               gusts <= 45 ? 'OK' : 'HIGH');
+    setCondStatus('condStatusDir',   null,                      dir);
+    setCondStatus('condStatusWave',  parseFloat(waveH) <= 2.0,  parseFloat(waveH) <= 2.0 ? 'OK' : 'HIGH');
+    setCondStatus('condStatusSwell', null,                      `${swellDir} ${swellPer}s`);
 
     // ── Tide: DNPVN 2026 harmonic table (cosine interpolation) ──
     // Rendered by renderTideFromDNPVN() which is called from initTides().
@@ -840,34 +935,56 @@ async function fetchForecast() {
 }
 
 function renderForecastStrip(days) {
-  const strip = document.getElementById('forecastStrip');
-  if (!strip) return;
+  const tbody = document.getElementById('forecastTbody');
+  if (!tbody) return;
 
-  strip.innerHTML = days.map(d => {
+  // Table rows
+  tbody.innerHTML = days.map(d => {
     if (d.noData) {
-      return `<div class="forecast-day">
-        <div class="forecast-day-name">${d.dayName}</div>
-        <div class="forecast-day-date">${d.dateLabel}</div>
-        <div class="forecast-icon">—</div>
-        <div class="forecast-verdict" style="color:var(--color-text-faint)">N/A</div>
-      </div>`;
+      return `<tr class="forecast-row-nodata">
+        <td class="fc-day">${d.dayName}</td>
+        <td class="fc-date">${d.dateLabel}</td>
+        <td colspan="6" style="color:var(--color-text-faint)">No data</td>
+      </tr>`;
     }
-
-    const cls = d.goKite ? 'go-kite' : 'gym-day';
-    const todayCls = d.isToday ? ' today' : '';
-    const icon     = d.goKite ? '🪁' : '🏋️';
     const verdict  = d.goKite ? 'GO KITE' : 'GYM';
-
-    return `<div class="forecast-day ${cls}${todayCls}">
-      <div class="forecast-day-name">${d.dayName}${d.isToday ? ' ●' : ''}</div>
-      <div class="forecast-day-date">${d.dateLabel}</div>
-      <div class="forecast-icon">${icon}</div>
-      <div class="forecast-verdict">${verdict}</div>
-      <div class="forecast-wind">💨 ${d.speed} km/h</div>
-      <div class="forecast-wave">🌊 ${d.wave}m</div>
-      <div class="forecast-meta">${d.tideInfo}</div>
-    </div>`;
+    const vClass   = d.goKite ? 'fc-go' : 'fc-nogo';
+    const todayCls = d.isToday ? ' fc-today' : '';
+    return `<tr class="forecast-row${todayCls}">
+      <td class="fc-day">${d.dayName}${d.isToday ? '<span class="fc-now-dot"></span>' : ''}</td>
+      <td class="fc-date">${d.dateLabel}</td>
+      <td class="fc-verdict ${vClass}">${verdict}</td>
+      <td class="fc-num">${d.speed} <span class="fc-unit">km/h</span></td>
+      <td class="fc-num">${d.gusts} <span class="fc-unit">km/h</span></td>
+      <td class="fc-num">${d.wave} <span class="fc-unit">m</span></td>
+      <td class="fc-num">${d.tideInfo || '—'}</td>
+      <td class="fc-reason">${d.reason}</td>
+    </tr>`;
   }).join('');
+
+  // Wind bar mini-chart (inline SVG)
+  const chartEl = document.getElementById('forecastWindChart');
+  if (chartEl) {
+    const valid = days.filter(d => !d.noData);
+    const maxSpd = Math.max(...valid.map(d => d.speed), 1);
+    const minThreshold = STATE.settings.minWind || 18;
+    const w = 100 / (days.length || 1);
+    const barsSvg = days.map((d, i) => {
+      if (d.noData) return `<rect x="${i*w+w*0.1}%" y="0" width="${w*0.8}%" height="100%" fill="var(--color-surface-2)" rx="1"/>`;
+      const hPct = Math.max(4, Math.round(d.speed / maxSpd * 100));
+      const fill = d.speed >= minThreshold ? 'var(--color-primary)' : 'var(--color-text-faint)';
+      const top  = 100 - hPct;
+      return `<rect x="${i*w+w*0.1}%" y="${top}%" width="${w*0.8}%" height="${hPct}%" fill="${fill}" rx="1"/>
+        <text x="${i*w+w/2}%" y="97%" text-anchor="middle" font-size="9" font-family="'JetBrains Mono',monospace" fill="var(--color-text-muted)">${d.dayName.slice(0,1)}</text>`;
+    }).join('');
+    const threshPct = 100 - Math.round(minThreshold / maxSpd * 100);
+    chartEl.innerHTML = `
+      <div class="fwc-label">WIND SPEED (km/h) — 09:00 morning · threshold ${minThreshold} km/h</div>
+      <svg class="fwc-svg" viewBox="0 0 700 60" preserveAspectRatio="none">
+        ${barsSvg}
+        <line x1="0" y1="${threshPct}%" x2="100%" y2="${threshPct}%" stroke="var(--color-amber)" stroke-width="1" stroke-dasharray="4 3"/>
+      </svg>`;
+  }
 }
 
 // ── GOOGLE CALENDAR SIMULATION ────────────────────────────────────────────
@@ -996,7 +1113,7 @@ function buildWeekView() {
     <div class="week-kpi">
       <div class="week-kpi-value">${bestStreak}d</div>
       <div class="week-kpi-label">Best current streak</div>
-      <div class="week-kpi-delta ${bestStreak >= 3 ? 'up' : 'flat'}">${bestStreak >= 3 ? '🔥 On fire' : 'Keep going'}</div>
+      <div class="week-kpi-delta ${bestStreak >= 3 ? 'up' : 'flat'}">${bestStreak >= 3 ? 'ON FIRE' : 'KEEP GOING'}</div>
     </div>
     <div class="week-kpi">
       <div class="week-kpi-value">${simKite}/${simKite + simGym}</div>
@@ -1016,7 +1133,7 @@ function buildWeekView() {
     const pct = Math.round(h.weekDays / 7 * 100);
     return `
       <div class="week-habit-bar-row">
-        <div class="week-habit-bar-label">${h.emoji} ${h.name}</div>
+        <div class="week-habit-bar-label">${h.name}</div>
         <div class="week-habit-bar-track">
           <div class="week-habit-bar-fill ${pct === 100 ? 'full' : ''}" style="width:${pct}%"></div>
         </div>
