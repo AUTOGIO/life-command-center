@@ -8,6 +8,52 @@
    sessionStorage fallback pattern.
    ============================================= */
 
+// ── TIDE ENGINE (DNPVN 2026 — Porto de Cabedelo) ─────────────────────────
+// Dynamically imported so the main thread isn't blocked.
+// Loaded once at init(); all subsequent calls are synchronous in-memory.
+let tideEngine = null; // module reference, set after dynamic import
+
+async function initTides() {
+  try {
+    tideEngine = await import('./tides.js');
+    await tideEngine.loadTides();
+    console.log('[tides] DNPVN 2026 loaded — 44 harmonic components, Porto de Cabedelo');
+    // Immediately render tide section with exact data
+    renderTideFromDNPVN();
+  } catch (e) {
+    console.warn('[tides] Failed to load DNPVN table, falling back to Open-Meteo:', e);
+  }
+}
+
+function renderTideFromDNPVN() {
+  if (!tideEngine) return;
+  const result = tideEngine.getTideAt(Date.now());
+  if (!result) return;
+  const { levelStr, trendLabel, trendArrow, nextExtremeLabel } = tideEngine.formatTide(result);
+
+  // Tide bar: range from today's extremes for context
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const todayEvents = tideEngine.getEventsForDate(ymd);
+  const heights = todayEvents.map(e => e.height);
+  const minH = heights.length ? Math.min(...heights) : 0;
+  const maxH = heights.length ? Math.max(...heights) : 2.5;
+  const normPct = maxH > minH ? Math.round(((result.height - minH) / (maxH - minH)) * 100) : 50;
+
+  // Update DOM
+  const tideCurrent = document.getElementById('tideCurrent');
+  if (tideCurrent) tideCurrent.textContent = levelStr;
+  const tideLabel = document.getElementById('tideTrendLabel');
+  if (tideLabel) tideLabel.textContent = `${trendLabel} ${trendArrow}`.trim();
+  const tideBar = document.getElementById('tideBarFill');
+  if (tideBar) tideBar.style.width = `${normPct}%`;
+  const tideNext = document.getElementById('tideTrendNext');
+  if (tideNext) tideNext.textContent = `→ ${nextExtremeLabel}`;
+
+  STATE.tides = { level: result.height, trend: result.trend,
+                  rising: result.trend === 'rising', source: 'DNPVN' };
+}
+
 // ── STATE ──────────────────────────────────────────────────────────────────
 const STATE = {
   settings: {
@@ -415,13 +461,15 @@ function initNotes() {
   });
 }
 
-// ── LIVE CONDITIONS — Open-Meteo Wind + Marine ───────────────────────────
-// Fetches both APIs in parallel. No API key required.
+// ── LIVE CONDITIONS — Open-Meteo Wind + Marine (waves) + DNPVN tide ───────────
+// Wind + waves from Open-Meteo (free, no key).
+// Tide: DNPVN 2026 44-component harmonic table — most accurate source for this coast.
 async function fetchConditions() {
   const { lat, lon, minWind } = STATE.settings;
 
+  // Only wind + waves needed from Open-Meteo now; tide comes from DNPVN table.
   const windUrl   = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kmh&timezone=America%2FFortaleza`;
-  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,swell_wave_height,swell_wave_direction,swell_wave_period,sea_level_height_msl&hourly=sea_level_height_msl&forecast_hours=24&timezone=America%2FFortaleza`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=America%2FFortaleza`;
 
   try {
     const [windRes, marineRes] = await Promise.all([fetch(windUrl), fetch(marineUrl)]);
@@ -439,81 +487,30 @@ async function fetchConditions() {
     document.getElementById('windGusts').textContent = gusts;
     document.getElementById('windDir').textContent   = dir;
 
-    // ── Marine ──
+    // ── Waves (Open-Meteo Marine — no tide fields needed) ──
     const m = marineData.current;
-    const waveH   = m.wave_height.toFixed(1);
-    const swellH  = m.swell_wave_height.toFixed(1);
+    const waveH    = m.wave_height.toFixed(1);
+    const swellH   = m.swell_wave_height.toFixed(1);
     const swellDir = windDirLabel(m.swell_wave_direction);
     const swellPer = m.swell_wave_period.toFixed(0);
-    const seaLevel = m.sea_level_height_msl; // metres MSL, real tidal data
 
     document.getElementById('waveHeight').textContent  = waveH;
     document.getElementById('swellHeight').textContent = swellH;
 
-    // ── Real tide from sea_level_height_msl hourly series ──
-    const hourlyTimes  = marineData.hourly.time;
-    const hourlyLevels = marineData.hourly.sea_level_height_msl;
-    const nowStr = new Date().toISOString().slice(0, 13); // "2026-04-23T10"
-    const currentIdx = hourlyTimes.findIndex(t => t.startsWith(nowStr));
-
-    // Range for normalised bar (local min/max in 24h window)
-    const validLevels = hourlyLevels.filter(v => v !== null);
-    const minL = Math.min(...validLevels);
-    const maxL = Math.max(...validLevels);
-    const range = maxL - minL || 1;
-    const normPct = currentIdx >= 0
-      ? Math.round(((hourlyLevels[currentIdx] - minL) / range) * 100)
-      : 50;
-
-    // Determine rising vs falling from adjacent hours
-    let tideLabel = 'Tide';
-    let tideArrow = '';
-    if (currentIdx > 0 && currentIdx < hourlyLevels.length - 1) {
-      const prev = hourlyLevels[currentIdx - 1];
-      const next = hourlyLevels[currentIdx + 1];
-      const current = hourlyLevels[currentIdx];
-      if (current > prev && current > next) { tideLabel = 'High tide'; tideArrow = ''; }
-      else if (current < prev && current < next) { tideLabel = 'Low tide'; tideArrow = ''; }
-      else if (next > current) { tideLabel = 'Rising'; tideArrow = '↑'; }
-      else { tideLabel = 'Falling'; tideArrow = '↓'; }
-    }
-
-    const levelM = currentIdx >= 0 ? hourlyLevels[currentIdx] : seaLevel;
-    document.getElementById('tideCurrent').textContent =
-      levelM !== null ? `${levelM > 0 ? '+' : ''}${levelM.toFixed(2)}m` : '—';
-
-    // Find next extreme in hourly series
-    let nextExtremeLabel = '—';
-    if (currentIdx >= 0 && currentIdx < hourlyLevels.length - 2) {
-      for (let i = currentIdx + 1; i < hourlyLevels.length - 1; i++) {
-        const p = hourlyLevels[i - 1], c = hourlyLevels[i], n = hourlyLevels[i + 1];
-        if (c !== null && p !== null && n !== null) {
-          if (c > p && c > n) {
-            const t = new Date(hourlyTimes[i]);
-            nextExtremeLabel = `High ${t.getHours()}:00`;
-            break;
-          } else if (c < p && c < n) {
-            const t = new Date(hourlyTimes[i]);
-            nextExtremeLabel = `Low ${t.getHours()}:00`;
-            break;
-          }
-        }
-      }
-    }
-
-    document.getElementById('tideTrendLabel').textContent = `${tideLabel} ${tideArrow}`;
-    document.getElementById('tideBarFill').style.width = `${normPct}%`;
-    document.getElementById('tideTrendNext').textContent = `→ ${nextExtremeLabel}`;
+    // ── Tide: DNPVN 2026 harmonic table (cosine interpolation) ──
+    // Rendered by renderTideFromDNPVN() which is called from initTides().
+    // If the engine is already loaded, refresh it now too.
+    renderTideFromDNPVN();
 
     // ── Decision logic ──
     const kiteReady = STATE.settings.kiteStatus === 'ready';
     const windOk  = speed >= minWind;
-    const gustsOk = gusts <= 45; // too gusty is dangerous
-    const wavesOk = parseFloat(waveH) <= 2.0; // >2m is rough for most kiters
+    const gustsOk = gusts <= 45;
+    const wavesOk = parseFloat(waveH) <= 2.0;
     STATE.conditionsOk = kiteReady && windOk;
 
+    const tideLevel = STATE.tides ? STATE.tides.level : null;
     STATE.weather = { speed, gusts, dir, dirDeg, temp, waveH, swellH, swellDir, swellPer };
-    STATE.tides   = { level: levelM, rising: tideArrow === '↑', tideLabel };
 
     updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk, wavesOk, waveH);
     updateKiteStatus();
@@ -717,6 +714,11 @@ function init() {
   initProjectForm();
   initNotes();
   initSettings();
+  // ── DNPVN tide engine — load first so renderTideFromDNPVN() fires immediately
+  initTides().then(() => {
+    // Refresh tide display every minute (interpolated — no API call)
+    setInterval(renderTideFromDNPVN, 60 * 1000);
+  });
   fetchConditions();
   setInterval(fetchConditions, 10 * 60 * 1000); // refresh every 10 min
   fetchForecast();
@@ -737,9 +739,9 @@ async function fetchForecast() {
     `&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m` +
     `&wind_speed_unit=kmh&forecast_days=7&timezone=America%2FFortaleza`;
 
-  // Marine: hourly wave_height, swell_wave_height, sea_level_height_msl for 7 days
+  // Marine: hourly wave_height, swell_wave_height for 7 days (tide now from DNPVN)
   const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
-    `&hourly=wave_height,swell_wave_height,sea_level_height_msl` +
+    `&hourly=wave_height,swell_wave_height` +
     `&forecast_days=7&timezone=America%2FFortaleza`;
 
   try {
@@ -752,7 +754,6 @@ async function fetchForecast() {
     const windDirs   = windData.hourly.wind_direction_10m;
     const waves      = marineData.hourly.wave_height;
     const swells     = marineData.hourly.swell_wave_height;
-    const seaLevels  = marineData.hourly.sea_level_height_msl;
 
     // For each of the next 7 days, pick the 09:00 local hour slot
     // Use local date strings (America/Fortaleza = UTC-3) to match Open-Meteo response
@@ -803,18 +804,13 @@ async function fetchForecast() {
       const wavesOk   = wave <= 2.0;
       const goKite    = kiteReady && windOk && gustsOk && wavesOk;
 
-      // Tide tendency at 09:00 — compare 08:00 vs 10:00
-      const idxMinus1 = windTimes.findIndex(t => t === `${dateStr}T08:00`);
-      const idxPlus1  = windTimes.findIndex(t => t === `${dateStr}T10:00`);
+      // Tide at 09:00 — DNPVN 2026 cosine interpolation (exact harmonic data)
       let tideInfo = '';
-      if (idxMinus1 >= 0 && idxPlus1 >= 0 && seaLevels) {
-        const lvlPrev = seaLevels[idxMinus1];
-        const lvlCurr = seaLevels[idx];
-        const lvlNext = seaLevels[idxPlus1];
-        if (lvlCurr !== null && lvlPrev !== null && lvlNext !== null) {
-          const rising = lvlNext > lvlCurr;
-          const level  = lvlCurr.toFixed(2);
-          tideInfo = `${level > 0 ? '+' : ''}${level}m ${rising ? '↑' : '↓'}`;
+      if (tideEngine) {
+        const t09 = tideEngine.getTideAtTime(dateStr, '09:00');
+        if (t09) {
+          const { levelStr, trendArrow } = tideEngine.formatTide(t09);
+          tideInfo = `${levelStr} ${trendArrow}`;
         }
       }
 
