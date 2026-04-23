@@ -1,0 +1,11 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# QA artifacts
+qa-*.png
+
+# Editor
+.cursor/
+.vscode/
+*.swp

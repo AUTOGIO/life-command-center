@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Command Center — Eduardo Giovannini</title>
+  <meta name="description" content="Personal life command center: schedule, habits, conditions, and AI projects." />
+
+  <!-- Fonts: Cabinet Grotesk (display) + Satoshi (body) -->
+  <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- NUDGE BAR -->
+  <div class="nudge-bar" id="nudgeBar">
+    <div class="nudge-icon" id="nudgeIcon">⚡</div>
+    <div class="nudge-text" id="nudgeText">Loading your day…</div>
+    <div class="nudge-actions" id="nudgeActions"></div>
+  </div>
+
+  <!-- MAIN DASHBOARD -->
+  <div class="dashboard">
+
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <!-- Logo -->
+        <svg class="logo" viewBox="0 0 36 36" fill="none" aria-label="Life Command Center" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="2" width="32" height="32" rx="8" stroke="currentColor" stroke-width="2.5" fill="none"/>
+          <circle cx="18" cy="18" r="5" fill="currentColor"/>
+          <line x1="18" y1="7" x2="18" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="18" y1="24" x2="18" y2="29" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="7" y1="18" x2="12" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="18" x2="29" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div class="header-title">
+          <span class="header-name">Life OS</span>
+          <span class="header-date" id="headerDate">—</span>
+        </div>
+      </div>
+      <!-- NAV TABS -->
+      <nav class="header-nav" role="tablist">
+        <button class="nav-tab active" id="tabToday" data-tab="today" role="tab" aria-selected="true">Today</button>
+        <button class="nav-tab" id="tabWeek" data-tab="week" role="tab" aria-selected="false">Week</button>
+      </nav>
+      <div class="header-right">
+        <div class="header-time" id="headerTime">—</div>
+        <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="main" id="mainArea">
+
+      <!-- ROW 1: CONDITIONS + TODAY BLOCK -->
+      <div class="grid-row grid-row--top">
+
+        <!-- CONDITIONS WIDGET -->
+        <section class="card conditions-card" aria-label="Kite conditions">
+          <div class="card-header">
+            <h2 class="card-title">Conditions</h2>
+            <span class="card-subtitle">João Pessoa · Now</span>
+          </div>
+          <div class="conditions-go-indicator" id="conditionsGo">
+            <div class="go-badge" id="goBadge">—</div>
+            <div class="go-label" id="goLabel">checking…</div>
+          </div>
+          <div class="conditions-grid">
+            <div class="condition-item">
+              <div class="condition-icon">💨</div>
+              <div class="condition-value" id="windSpeed">—</div>
+              <div class="condition-label">Wind (km/h)</div>
+            </div>
+            <div class="condition-item">
+              <div class="condition-icon">🧭</div>
+              <div class="condition-value" id="windDir">—</div>
+              <div class="condition-label">Direction</div>
+            </div>
+            <div class="condition-item">
+              <div class="condition-icon">🌊</div>
+              <div class="condition-value" id="tideCurrent">—</div>
+              <div class="condition-label">Tide</div>
+            </div>
+            <div class="condition-item">
+              <div class="condition-icon">⏱️</div>
+              <div class="condition-value" id="tideNext">—</div>
+              <div class="condition-label">Next change</div>
+            </div>
+          </div>
+          <div class="kite-status-bar" id="kiteStatusBar">
+            <span class="kite-status-dot" id="kiteStatusDot"></span>
+            <span id="kiteStatusText">Kite status: loading…</span>
+          </div>
+          <div class="conditions-updated" id="conditionsUpdated">—</div>
+        </section>
+
+        <!-- TODAY BLOCK -->
+        <section class="card today-card" aria-label="Today's schedule">
+          <div class="card-header">
+            <h2 class="card-title">Today</h2>
+            <span class="card-subtitle" id="todayDayName">—</span>
+          </div>
+          <!-- Fixed schedule blocks -->
+          <div class="schedule-list" id="scheduleList"></div>
+          <!-- Google Calendar simulated events -->
+          <div class="gcal-section">
+            <div class="gcal-header">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span>Google Calendar</span>
+              <span class="gcal-sync-badge" id="gcalSyncBadge">Synced just now</span>
+            </div>
+            <div class="gcal-events" id="gcalEvents"><!-- Built by JS --></div>
+          </div>
+        </section>
+
+        <!-- BLOCKERS / STATUS -->
+        <section class="card blockers-card" aria-label="Active blockers and status">
+          <div class="card-header">
+            <h2 class="card-title">Status</h2>
+          </div>
+          <div class="blocker-list" id="blockerList">
+            <!-- Built by JS -->
+          </div>
+          <div class="status-section-title">Mood</div>
+          <div class="mood-selector" id="moodSelector">
+            <button class="mood-btn" data-mood="🔥" title="On fire">🔥</button>
+            <button class="mood-btn" data-mood="💪" title="Good">💪</button>
+            <button class="mood-btn" data-mood="😐" title="Neutral">😐</button>
+            <button class="mood-btn" data-mood="😴" title="Low energy">😴</button>
+            <button class="mood-btn" data-mood="🤕" title="Not great">🤕</button>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ROW 2: HABITS + PROJECTS -->
+      <div class="grid-row grid-row--bottom">
+
+        <!-- HABIT RING -->
+        <section class="card habits-card" aria-label="Habit tracker">
+          <div class="card-header">
+            <h2 class="card-title">Habits</h2>
+            <span class="card-subtitle" id="habitSubtitle">Today</span>
+          </div>
+          <div class="habits-grid" id="habitsGrid">
+            <!-- Built by JS -->
+          </div>
+          <div class="habit-streak-row" id="habitStreakRow">
+            <!-- Streak summary -->
+          </div>
+          <div class="heatmap-section">
+            <div class="heatmap-label">Last 28 days</div>
+            <div class="heatmap-grid" id="heatmapGrid">
+              <!-- Built by JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- PROJECTS PANEL -->
+        <section class="card projects-card" aria-label="AI Projects">
+          <div class="card-header">
+            <h2 class="card-title">AI Projects</h2>
+            <button class="add-btn" id="addProjectBtn" title="Add project">+</button>
+          </div>
+          <div class="projects-list" id="projectsList">
+            <!-- Built by JS -->
+          </div>
+          <!-- Add project form (hidden by default) -->
+          <form class="add-project-form" id="addProjectForm" style="display:none;">
+            <input type="text" class="project-input" id="projectNameInput" placeholder="Project name…" maxlength="60" autocomplete="off" />
+            <div class="form-row">
+              <select class="project-select" id="projectPriorityInput">
+                <option value="high">🔴 High</option>
+                <option value="medium" selected>🟡 Medium</option>
+                <option value="low">🟢 Low</option>
+              </select>
+              <button type="submit" class="btn-primary">Add</button>
+              <button type="button" class="btn-ghost" id="cancelProjectBtn">Cancel</button>
+            </div>
+          </form>
+
+          <!-- Session timer -->
+          <div class="session-bar" id="sessionBar" style="display:none;">
+            <div class="session-label">Session — <span id="sessionProject">—</span></div>
+            <div class="session-timer" id="sessionTimer">00:00</div>
+            <button class="btn-ghost" id="endSessionBtn">End</button>
+          </div>
+        </section>
+
+        <!-- NOTES / REFLECTION -->
+        <section class="card notes-card" aria-label="Daily notes">
+          <div class="card-header">
+            <h2 class="card-title">Notes</h2>
+            <span class="card-subtitle">Today's reflection</span>
+          </div>
+          <textarea class="notes-textarea" id="notesTextarea" placeholder="What's on your mind today? Reflections, wins, blockers…" maxlength="2000" rows="6"></textarea>
+          <div class="notes-meta">
+            <span id="notesCharCount">0 / 2000</span>
+            <span class="notes-saved" id="notesSaved"></span>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+
+    <!-- WEEK VIEW -->
+    <main class="main week-view" id="weekView" style="display:none;">
+      <div class="week-grid">
+
+        <!-- KPI ROW -->
+        <div class="week-kpis" id="weekKpis"><!-- Built by JS --></div>
+
+        <!-- HEATMAP TRENDS -->
+        <section class="card week-card" aria-label="Habit heatmap trends">
+          <div class="card-header">
+            <h2 class="card-title">Habit Trends</h2>
+            <span class="card-subtitle">Last 7 days</span>
+          </div>
+          <div class="week-habit-bars" id="weekHabitBars"><!-- Built by JS --></div>
+          <div class="week-heatmap-label">Daily completion score</div>
+          <div class="week-heatmap-row" id="weekHeatmapRow"><!-- Built by JS --></div>
+        </section>
+
+        <!-- SESSION HOURS -->
+        <section class="card week-card" aria-label="AI Project session hours">
+          <div class="card-header">
+            <h2 class="card-title">AI Project Hours</h2>
+            <span class="card-subtitle">This week</span>
+          </div>
+          <div class="week-session-chart" id="weekSessionChart"><!-- Built by JS --></div>
+          <div class="week-session-total" id="weekSessionTotal"></div>
+        </section>
+
+        <!-- KITE / GYM RATIO -->
+        <section class="card week-card" aria-label="Kite vs Gym ratio">
+          <div class="card-header">
+            <h2 class="card-title">Kite vs Gym</h2>
+            <span class="card-subtitle">Last 7 days</span>
+          </div>
+          <div class="week-ratio-chart" id="weekRatioChart"><!-- Built by JS --></div>
+          <div class="week-ratio-legend" id="weekRatioLegend"></div>
+        </section>
+
+        <!-- WEEKLY SUMMARY -->
+        <section class="card week-card week-card--summary" aria-label="Week summary">
+          <div class="card-header">
+            <h2 class="card-title">Week Summary</h2>
+          </div>
+          <div class="week-summary-text" id="weekSummaryText"><!-- Built by JS --></div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div class="modal-overlay" id="settingsOverlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Settings</h3>
+        <button class="modal-close" id="settingsClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-group">
+          <label class="settings-label">Kite spot location</label>
+          <input type="text" class="settings-input" id="settingsLat" placeholder="Latitude" value="-7.115" />
+          <input type="text" class="settings-input" id="settingsLon" placeholder="Longitude" value="-34.863" />
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">Min wind for kitesurfing (km/h)</label>
+          <input type="number" class="settings-input" id="settingsMinWind" placeholder="18" value="18" min="10" max="40" />
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">Shoulder recovery (days remaining)</label>
+          <input type="number" class="settings-input" id="settingsShoulderDays" placeholder="3" value="3" min="0" max="60" />
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">Kite status</label>
+          <select class="settings-input" id="settingsKiteStatus">
+            <option value="repair">In repair</option>
+            <option value="ready">Ready to fly</option>
+          </select>
+        </div>
+        <button class="btn-primary" id="settingsSave">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings FAB -->
+  <button class="settings-fab" id="settingsFab" aria-label="Open settings" title="Settings">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+
+  <script src="app.js"></script>
+</body>
+</html>
