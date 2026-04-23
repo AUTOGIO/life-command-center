@@ -719,11 +719,160 @@ function init() {
   initSettings();
   fetchConditions();
   setInterval(fetchConditions, 10 * 60 * 1000); // refresh every 10 min
+  fetchForecast();
+  setInterval(fetchForecast, 60 * 60 * 1000); // forecast refreshes hourly
   updateNudge();
   setInterval(updateNudge, 5 * 60 * 1000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ── 7-DAY KITE FORECAST ───────────────────────────────────────────────────
+async function fetchForecast() {
+  const { lat, lon, minWind } = STATE.settings;
+
+  // Fetch 7-day hourly wind + marine data
+  // Wind: hourly wind_speed_10m, wind_gusts_10m for 7 days
+  const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m` +
+    `&wind_speed_unit=kmh&forecast_days=7&timezone=America%2FFortaleza`;
+
+  // Marine: hourly wave_height, swell_wave_height, sea_level_height_msl for 7 days
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
+    `&hourly=wave_height,swell_wave_height,sea_level_height_msl` +
+    `&forecast_days=7&timezone=America%2FFortaleza`;
+
+  try {
+    const [windRes, marineRes] = await Promise.all([fetch(windUrl), fetch(marineUrl)]);
+    const [windData, marineData] = await Promise.all([windRes.json(), marineRes.json()]);
+
+    const windTimes  = windData.hourly.time;
+    const windSpeeds = windData.hourly.wind_speed_10m;
+    const windGusts  = windData.hourly.wind_gusts_10m;
+    const windDirs   = windData.hourly.wind_direction_10m;
+    const waves      = marineData.hourly.wave_height;
+    const swells     = marineData.hourly.swell_wave_height;
+    const seaLevels  = marineData.hourly.sea_level_height_msl;
+
+    // For each of the next 7 days, pick the 09:00 local hour slot
+    // Use local date strings (America/Fortaleza = UTC-3) to match Open-Meteo response
+    const today = new Date();
+    const localDateStr = (d) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() + d);
+      // Format in local timezone (Fortaleza UTC-3)
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const todayStr = localDateStr(0);
+    const days = [];
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + d);
+      const dateStr = localDateStr(d);
+
+      // Target 09:00 local — find index in hourly.time array matching "YYYY-MM-DDTHH:00"
+      // Open-Meteo returns times in local timezone as ISO strings like "2026-04-23T09:00"
+      const targetStr = `${dateStr}T09:00`;
+      const idx = windTimes.findIndex(t => t === targetStr);
+
+      const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const dayName  = dayNames[date.getDay()];
+      const dateLabel = `${date.getDate()} ${monthNames[date.getMonth()]}`;
+      const isToday  = dateStr === todayStr;
+
+      if (idx === -1) {
+        // Slot not found — mark as unavailable
+        days.push({ dayName, dateLabel, isToday, noData: true });
+        continue;
+      }
+
+      const speed = Math.round(windSpeeds[idx] ?? 0);
+      const gusts = Math.round(windGusts[idx] ?? 0);
+      const dir   = windDirLabel(windDirs[idx] ?? 0);
+      const wave  = parseFloat((waves[idx] ?? 0).toFixed(1));
+      const swell = parseFloat((swells[idx] ?? 0).toFixed(1));
+
+      // Kite decision thresholds (same as live widget)
+      const kiteReady = STATE.settings.kiteStatus === 'ready';
+      const windOk    = speed >= minWind;
+      const gustsOk   = gusts <= 45;
+      const wavesOk   = wave <= 2.0;
+      const goKite    = kiteReady && windOk && gustsOk && wavesOk;
+
+      // Tide tendency at 09:00 — compare 08:00 vs 10:00
+      const idxMinus1 = windTimes.findIndex(t => t === `${dateStr}T08:00`);
+      const idxPlus1  = windTimes.findIndex(t => t === `${dateStr}T10:00`);
+      let tideInfo = '';
+      if (idxMinus1 >= 0 && idxPlus1 >= 0 && seaLevels) {
+        const lvlPrev = seaLevels[idxMinus1];
+        const lvlCurr = seaLevels[idx];
+        const lvlNext = seaLevels[idxPlus1];
+        if (lvlCurr !== null && lvlPrev !== null && lvlNext !== null) {
+          const rising = lvlNext > lvlCurr;
+          const level  = lvlCurr.toFixed(2);
+          tideInfo = `${level > 0 ? '+' : ''}${level}m ${rising ? '↑' : '↓'}`;
+        }
+      }
+
+      // Reason label
+      let reason = '';
+      if (!kiteReady)      reason = 'kites in repair';
+      else if (!windOk)    reason = `wind ${speed}km/h`;
+      else if (!gustsOk)   reason = `gusts ${gusts}km/h`;
+      else if (!wavesOk)   reason = `waves ${wave}m`;
+      else                 reason = `${speed}km/h ${dir}`;
+
+      days.push({ dayName, dateLabel, isToday, goKite, speed, gusts, dir, wave, swell, tideInfo, reason, noData: false });
+    }
+
+    renderForecastStrip(days);
+
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const el = document.getElementById('forecastUpdated');
+    if (el) el.textContent = `Jo\u00e3o Pessoa \u00b7 09:00 window \u00b7 ${ts}`;
+
+  } catch(e) {
+    console.error('Forecast fetch failed:', e);
+    const el = document.getElementById('forecastUpdated');
+    if (el) el.textContent = 'Forecast unavailable';
+  }
+}
+
+function renderForecastStrip(days) {
+  const strip = document.getElementById('forecastStrip');
+  if (!strip) return;
+
+  strip.innerHTML = days.map(d => {
+    if (d.noData) {
+      return `<div class="forecast-day">
+        <div class="forecast-day-name">${d.dayName}</div>
+        <div class="forecast-day-date">${d.dateLabel}</div>
+        <div class="forecast-icon">—</div>
+        <div class="forecast-verdict" style="color:var(--color-text-faint)">N/A</div>
+      </div>`;
+    }
+
+    const cls = d.goKite ? 'go-kite' : 'gym-day';
+    const todayCls = d.isToday ? ' today' : '';
+    const icon     = d.goKite ? '🪁' : '🏋️';
+    const verdict  = d.goKite ? 'GO KITE' : 'GYM';
+
+    return `<div class="forecast-day ${cls}${todayCls}">
+      <div class="forecast-day-name">${d.dayName}${d.isToday ? ' ●' : ''}</div>
+      <div class="forecast-day-date">${d.dateLabel}</div>
+      <div class="forecast-icon">${icon}</div>
+      <div class="forecast-verdict">${verdict}</div>
+      <div class="forecast-wind">💨 ${d.speed} km/h</div>
+      <div class="forecast-wave">🌊 ${d.wave}m</div>
+      <div class="forecast-meta">${d.tideInfo}</div>
+    </div>`;
+  }).join('');
+}
 
 // ── GOOGLE CALENDAR SIMULATION ────────────────────────────────────────────
 // Simulated events — realistic for Eduardo's life as a retired tax auditor + developer
