@@ -2014,8 +2014,8 @@ body::before {
   border-color: var(--color-error);
 }
 .gng-banner[data-state="blocked"] {
-  background: var(--color-surface-2);
-  border-color: var(--color-border);
+  background: var(--color-warning-highlight);
+  border-color: var(--color-warning);
 }
 .gng-banner[data-state="checking"] {
   opacity: 0.5;
@@ -2032,7 +2032,7 @@ body::before {
 }
 .gng-banner[data-state="go"]      .gng-verdict { color: var(--color-success); }
 .gng-banner[data-state="nogo"]    .gng-verdict { color: var(--color-error); }
-.gng-banner[data-state="blocked"] .gng-verdict { color: var(--color-text-muted); }
+.gng-banner[data-state="blocked"] .gng-verdict { color: var(--color-warning); }
 .gng-banner[data-state="checking"].gng-verdict { color: var(--color-text-muted); }
 
 /* Reason line */
@@ -2045,6 +2045,7 @@ body::before {
 }
 .gng-banner[data-state="go"]   .gng-reason { color: var(--color-success); opacity: 0.8; }
 .gng-banner[data-state="nogo"] .gng-reason { color: var(--color-error);   opacity: 0.8; }
+.gng-banner[data-state="blocked"] .gng-reason { color: var(--color-warning); opacity: 0.85; }
 
 /* Metric chips */
 .gng-metrics {

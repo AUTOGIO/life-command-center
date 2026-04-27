@@ -75,7 +75,7 @@
         <!-- GO / NO-GO BANNER -->
         <div class="gng-banner" id="gngBanner" data-state="checking">
           <div class="gng-verdict" id="gngVerdict">CHECKING</div>
-          <div class="gng-reason" id="gngReason">Reading live conditions…</div>
+          <div class="gng-reason" id="gngReason">Reading real wind and tide…</div>
           <div class="gng-metrics" id="gngMetrics"></div>
         </div>
 
@@ -83,7 +83,7 @@
         <section class="card conditions-card" aria-label="Kite conditions">
           <div class="card-header">
             <h2 class="card-title">Conditions</h2>
-            <span class="card-subtitle">João Pessoa · Now</span>
+            <span class="card-subtitle">João Pessoa kite spot · real wind + DNPVN tide</span>
           </div>
           <!-- Conditions data table -->
           <table class="conditions-table">
@@ -157,7 +157,7 @@
           <div class="wfc-legend">
             <span class="wfc-swatch wfc-swatch-wind"></span><span>Wind</span>
             <span class="wfc-swatch wfc-swatch-gusts"></span><span>Gusts</span>
-            <span class="wfc-swatch wfc-swatch-thresh"></span><span>Kite min (18 km/h)</span>
+            <span class="wfc-swatch wfc-swatch-thresh"></span><span>Kite min (<span id="wfcLegendThresh">18</span> km/h)</span>
             <div style="flex:1"></div>
             <span class="wfc-peak" id="wfcPeakLabel">—</span>
           </div>
@@ -357,8 +357,8 @@
           <input type="text" class="settings-input" id="settingsLon" placeholder="Longitude" value="-34.863" />
         </div>
         <div class="settings-group">
-          <label class="settings-label">Min wind for kitesurfing (km/h)</label>
-          <input type="number" class="settings-input" id="settingsMinWind" placeholder="18" value="18" min="10" max="40" />
+          <label class="settings-label">Min wind for kitesurfing (kt)</label>
+          <input type="number" class="settings-input" id="settingsMinWind" placeholder="10" value="10" min="5" max="35" step="0.5" />
         </div>
         <div class="settings-group">
           <label class="settings-label">Shoulder recovery (days remaining)</label>

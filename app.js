@@ -90,7 +90,7 @@ function buildTideCurve() {
     const r  = tideEngine.getTideAt(ms);
     if (!r) continue;
     const x = (i / 48) * W;
-    const y = PAD_T + plotH - ((r.level - minH) / range) * plotH;
+    const y = PAD_T + plotH - ((r.height - minH) / range) * plotH;
     pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
   }
 
@@ -100,7 +100,7 @@ function buildTideCurve() {
   const nowY    = (() => {
     const r = tideEngine.getTideAt(Date.now());
     if (!r) return ((H - PAD_B) / 2).toFixed(1);
-    return (PAD_T + plotH - ((r.level - minH) / range) * plotH).toFixed(1);
+    return (PAD_T + plotH - ((r.height - minH) / range) * plotH).toFixed(1);
   })();
 
   const yLo = (H - PAD_B).toFixed(1);
@@ -145,6 +145,7 @@ const STATE = {
     maxGustsKt: 24,   // knots — default 24 kt ≈ 45 km/h
     maxTideM: 1.6,    // metres — Cabedelo kite spot max safe tide
     shoulderDaysLeft: 3,
+    shoulderTargetDate: null, // YYYY-MM-DD local date when recovery reaches zero
     kiteStatus: 'repair', // 'repair' | 'ready'
   },
   habits: [
@@ -170,6 +171,58 @@ const STATE = {
   conditionsOk: null,
 };
 
+const KMH_TO_KT = 0.539957;
+const KT_TO_KMH = 1 / KMH_TO_KT;
+const LOCAL_TZ = 'America/Fortaleza';
+
+function localDateKey(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: LOCAL_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+function addLocalDays(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  return dt.toISOString().slice(0, 10);
+}
+
+function daysUntilLocalDate(dateStr) {
+  if (!dateStr) return 0;
+  const today = localDateKey();
+  const [ty, tm, td] = today.split('-').map(Number);
+  const [ey, em, ed] = dateStr.split('-').map(Number);
+  const t0 = Date.UTC(ty, tm - 1, td);
+  const t1 = Date.UTC(ey, em - 1, ed);
+  return Math.max(0, Math.ceil((t1 - t0) / 86400000));
+}
+
+function normalizeSettings() {
+  // Backward compatibility for previous deployments that stored minWind in km/h.
+  if (typeof STATE.settings.minWind === 'number' && !Number.isFinite(STATE.settings.minWindKt)) {
+    STATE.settings.minWindKt = Math.max(1, Math.round(STATE.settings.minWind * KMH_TO_KT));
+  }
+  delete STATE.settings.minWind;
+
+  if (!STATE.settings.minWindKt) STATE.settings.minWindKt = 10;
+  if (!STATE.settings.maxGustsKt) STATE.settings.maxGustsKt = 24;
+  if (!STATE.settings.maxTideM) STATE.settings.maxTideM = 1.6;
+
+  if (!STATE.settings.shoulderTargetDate && STATE.settings.shoulderDaysLeft > 0) {
+    STATE.settings.shoulderTargetDate = addLocalDays(localDateKey(), STATE.settings.shoulderDaysLeft);
+  }
+  if (STATE.settings.shoulderTargetDate) {
+    STATE.settings.shoulderDaysLeft = daysUntilLocalDate(STATE.settings.shoulderTargetDate);
+  }
+}
+
+function minWindKmh() {
+  return Math.round((STATE.settings.minWindKt || 10) * KT_TO_KMH);
+}
+
 // ── PERSISTENCE (localStorage) ───────────────────────────────────────────────
 const LS_KEY = 'lifeOS_v1';
 
@@ -191,8 +244,15 @@ function restoreState() {
       if (saved.shoulderStartDate) {
         STATE.settings.shoulderStartDate = saved.shoulderStartDate;
       }
+      if (saved.shoulderTargetDate) {
+        STATE.settings.shoulderTargetDate = saved.shoulderTargetDate;
+      }
       // Kite status
       if (saved.kiteStatus) STATE.settings.kiteStatus = saved.kiteStatus;
+      if (typeof saved.minWindKt === 'number') STATE.settings.minWindKt = saved.minWindKt;
+      if (typeof saved.minWind === 'number') STATE.settings.minWind = saved.minWind;
+      if (typeof saved.maxGustsKt === 'number') STATE.settings.maxGustsKt = saved.maxGustsKt;
+      if (typeof saved.maxTideM === 'number') STATE.settings.maxTideM = saved.maxTideM;
       // Habits: restore done + streak
       if (Array.isArray(saved.habits)) {
         saved.habits.forEach(sh => {
@@ -206,6 +266,8 @@ function restoreState() {
       if (Array.isArray(saved.projects)) STATE.projects = saved.projects;
     }
   } catch(e) { console.warn('restoreState error', e); }
+
+  normalizeSettings();
 
   // Derive blocked states from saved settings
   const muay = STATE.habits.find(h => h.id === 'muay');
@@ -223,6 +285,10 @@ function persistState() {
       shoulderTotalDays:     STATE.settings.shoulderTotalDays  || 0,
       shoulderLastDecrement: STATE.settings.shoulderLastDecrement || null,
       shoulderStartDate:     STATE.settings.shoulderStartDate || null,
+      shoulderTargetDate:    STATE.settings.shoulderTargetDate || null,
+      minWindKt:             STATE.settings.minWindKt,
+      maxGustsKt:            STATE.settings.maxGustsKt,
+      maxTideM:              STATE.settings.maxTideM,
       kiteStatus:        STATE.settings.kiteStatus,
       habits: STATE.habits.map(h => ({ id: h.id, streak: h.streak })),
       heatmap:  STATE.heatmap,
@@ -361,6 +427,7 @@ function buildWindChart() {
   const peakEl = document.getElementById('wfcPeakLabel');
   const winEl  = document.getElementById('wfcWindowsList');
   const thrEl  = document.getElementById('wfcThreshLabel');
+  const legendThrEl = document.getElementById('wfcLegendThresh');
   if (!svg) return;
 
   const W = 700, H = 100, PAD_T = 10, PAD_B = 14, PAD_L = 0, PAD_R = 0;
@@ -368,7 +435,9 @@ function buildWindChart() {
   const plotH = H - PAD_T - PAD_B;
   const n     = d.times.length;
   const minWindKt = STATE.settings.minWindKt || 10;
+  const minWind = minWindKmh();
   if (thrEl) thrEl.textContent = minWind;
+  if (legendThrEl) legendThrEl.textContent = minWind;
 
   const maxVal = Math.max(Math.max(...d.gusts), minWind + 10, 40);
 
@@ -511,6 +580,9 @@ function renderShoulderBar() {
   const dotsEl   = document.getElementById('shoulderDots');
   if (!bar) return;
 
+  if (STATE.settings.shoulderTargetDate) {
+    STATE.settings.shoulderDaysLeft = daysUntilLocalDate(STATE.settings.shoulderTargetDate);
+  }
   const days = STATE.settings.shoulderDaysLeft;
 
   if (days <= 0) {
@@ -535,11 +607,15 @@ function renderShoulderBar() {
 function decrementShoulderDay() {
   if (STATE.settings.shoulderDaysLeft <= 0) return;
 
-  const todayKey = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const todayKey = localDateKey(); // "YYYY-MM-DD" in America/Fortaleza
   if (STATE.settings.shoulderLastDecrement === todayKey) return; // already ran today
 
   STATE.settings.shoulderLastDecrement = todayKey;
-  STATE.settings.shoulderDaysLeft = Math.max(0, STATE.settings.shoulderDaysLeft - 1);
+  if (STATE.settings.shoulderTargetDate) {
+    STATE.settings.shoulderDaysLeft = daysUntilLocalDate(STATE.settings.shoulderTargetDate);
+  } else {
+    STATE.settings.shoulderDaysLeft = Math.max(0, STATE.settings.shoulderDaysLeft - 1);
+  }
 
   const muay = STATE.habits.find(h => h.id === 'muay');
   if (muay) muay.blocked = STATE.settings.shoulderDaysLeft > 0;
@@ -578,6 +654,9 @@ function initShoulderBar() {
   if (!STATE.settings.shoulderTotalDays) {
     STATE.settings.shoulderTotalDays = STATE.settings.shoulderDaysLeft || 5;
   }
+  if (!STATE.settings.shoulderTargetDate && STATE.settings.shoulderDaysLeft > 0) {
+    STATE.settings.shoulderTargetDate = addLocalDays(localDateKey(), STATE.settings.shoulderDaysLeft);
+  }
 
   // Catch up: if app was closed overnight, decrement for today
   decrementShoulderDay();
@@ -592,6 +671,9 @@ function initShoulderBar() {
   btnMinus?.addEventListener('click', () => {
     if (STATE.settings.shoulderDaysLeft <= 0) return;
     STATE.settings.shoulderDaysLeft = Math.max(0, STATE.settings.shoulderDaysLeft - 1);
+    STATE.settings.shoulderTargetDate = STATE.settings.shoulderDaysLeft > 0
+      ? addLocalDays(localDateKey(), STATE.settings.shoulderDaysLeft)
+      : null;
     const muay = STATE.habits.find(h => h.id === 'muay');
     if (muay) muay.blocked = STATE.settings.shoulderDaysLeft > 0;
     persistState();
@@ -604,6 +686,7 @@ function initShoulderBar() {
   btnHealed?.addEventListener('click', () => {
     STATE.settings.shoulderDaysLeft  = 0;
     STATE.settings.shoulderTotalDays = 0;
+    STATE.settings.shoulderTargetDate = null;
     const muay = STATE.habits.find(h => h.id === 'muay');
     if (muay) { muay.blocked = false; }
     persistState();
@@ -636,6 +719,9 @@ function renderBlockers() {
       text: `Shoulder recovery: ${s.shoulderDaysLeft} day${s.shoulderDaysLeft !== 1 ? 's' : ''} left`,
       action: () => {
         STATE.settings.shoulderDaysLeft = Math.max(0, STATE.settings.shoulderDaysLeft - 1);
+        STATE.settings.shoulderTargetDate = STATE.settings.shoulderDaysLeft > 0
+          ? addLocalDays(localDateKey(), STATE.settings.shoulderDaysLeft)
+          : null;
         const muay = STATE.habits.find(h => h.id === 'muay');
         if (muay) muay.blocked = STATE.settings.shoulderDaysLeft > 0;
         persistState();
@@ -890,11 +976,67 @@ function initNotes() {
   });
 }
 
+// ── GOOGLE CALENDAR SNAPSHOT (static daily scaffold) ───────────────────────
+function buildGCalEvents() {
+  const el = document.getElementById('gcalEvents');
+  const badge = document.getElementById('gcalSyncBadge');
+  if (!el) return;
+
+  const now = new Date();
+  const day = now.getDay();
+  const weekdayEvents = [
+    { title: 'Breakfast + conditions check', start: '08:00', end: '09:00', cal: 'Life', color: 'primary' },
+    { title: 'Physical block: auto Gym/Kite decision', start: '09:00', end: '11:30', cal: 'Training', color: STATE.conditionsOk ? 'success' : 'warning' },
+    { title: 'AI / systems deep work', start: '14:00', end: '18:00', cal: 'Build', color: 'primary' },
+    { title: 'Dogs + shutdown routine', start: '18:00', end: '20:00', cal: 'Home', color: 'muted' },
+  ];
+  const weekendEvents = [
+    { title: 'Open water / recovery window', start: '08:30', end: '11:30', cal: 'Life', color: STATE.conditionsOk ? 'success' : 'warning' },
+    { title: 'Family + errands buffer', start: '12:00', end: '16:00', cal: 'Home', color: 'muted' },
+    { title: 'Weekly review', start: '17:00', end: '18:00', cal: 'Planning', color: 'primary' },
+  ];
+  const events = day === 0 || day === 6 ? weekendEvents : weekdayEvents;
+
+  const colorFor = (color) => ({
+    success: 'var(--color-success)',
+    warning: 'var(--color-warning)',
+    primary: 'var(--color-primary)',
+    muted: 'var(--color-text-muted)',
+  }[color] || 'var(--color-primary)');
+
+  el.innerHTML = events.map(evt => `
+    <div class="gcal-event">
+      <div class="gcal-event-dot" style="background:${colorFor(evt.color)}"></div>
+      <div class="gcal-event-time">${evt.start}–${evt.end}</div>
+      <div class="gcal-event-body">
+        <div class="gcal-event-title">${evt.title}</div>
+        <div class="gcal-event-cal">${evt.cal}</div>
+      </div>
+    </div>
+  `).join('');
+
+  if (badge) {
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    badge.textContent = `Static snapshot · ${hh}:${mm}`;
+  }
+}
+
 // ── LIVE CONDITIONS — Open-Meteo Wind + Marine (waves) + DNPVN tide ───────────
 // Wind + waves from Open-Meteo (free, no key).
 // Tide: DNPVN 2026 44-component harmonic table — most accurate source for this coast.
 async function fetchConditions() {
-  const { lat, lon, minWind } = STATE.settings;
+  const { lat, lon } = STATE.settings;
+  const banner  = document.getElementById('gngBanner');
+  const verdict = document.getElementById('gngVerdict');
+  const reason  = document.getElementById('gngReason');
+  const metrics = document.getElementById('gngMetrics');
+  if (banner && verdict && reason && metrics) {
+    banner.dataset.state = 'checking';
+    verdict.textContent = 'CHECKING';
+    reason.textContent = 'Reading real wind and tide…';
+    metrics.innerHTML = '';
+  }
 
   // Wind only — tide from DNPVN table, waves removed from conditions block.
   const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=kmh&timezone=America%2FFortaleza`;
@@ -904,7 +1046,6 @@ async function fetchConditions() {
     const windData = await windRes.json();
 
     // ── Wind (convert km/h → knots) ──
-    const KMH_TO_KT = 0.539957;
     const w = windData.current;
     const speedKmh  = w.wind_speed_10m;
     const gustsKmh  = w.wind_gusts_10m;
@@ -947,19 +1088,19 @@ async function fetchConditions() {
     const gustsOk   = gustsKt <= maxGustsKt;
     const tideLevel = STATE.tides ? STATE.tides.level : null;
     const tideOk    = tideLevel === null ? true : tideLevel <= maxTideM;
-    STATE.conditionsOk = kiteReady && windOk && tideOk;
+    STATE.conditionsOk = kiteReady && windOk && gustsOk && tideOk;
 
     STATE.weather = { speedKt, gustsKt, speedKmh, gustsKmh, dir, dirDeg, temp };
 
     updateGNGBanner(kiteReady, windOk, gustsOk, tideOk, speedKt, gustsKt, tideLevel, minWindKt, maxGustsKt, maxTideM);
-    updateConditionsIndicator(speedKt, gustsKt, dir, kiteReady, windOk, gustsOk);
+    updateConditionsIndicator(speedKt, gustsKt, dir, kiteReady, windOk, gustsOk, tideOk);
     updateKiteStatus();
     updateNudge();
 
     const now = new Date();
     const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     document.getElementById('conditionsUpdated').innerHTML =
-      `<span class="live-badge">LIVE</span> Updated ${ts}`;
+      `<span class="live-badge">LIVE</span> Open-Meteo wind · DNPVN tide · Updated ${ts}`;
 
   } catch(e) {
     console.error('Conditions fetch failed:', e);
@@ -996,14 +1137,14 @@ function updateGNGBanner(kiteReady, windOk, gustsOk, tideOk, speedKt, gustsKt, t
 
   if (!kiteReady) {
     banner.dataset.state = 'blocked';
-    verdict.textContent  = 'KITES IN REPAIR';
-    reason.textContent   = 'Mark kites ready in Settings to enable GO/NO-GO';
+    verdict.textContent  = 'GYM';
+    reason.textContent   = 'Kites are still marked in repair · Gym block is active';
     return;
   }
 
   if (windOk && gustsOk && tideOk) {
     banner.dataset.state = 'go';
-    verdict.textContent  = 'GO KITE';
+    verdict.textContent  = 'KITE';
     reason.textContent   = `${speedKt} kt ${document.getElementById('windDir')?.textContent || ''} · Gusts ${gustsKt} kt · Tide ${tideLabelVal}`;
   } else {
     banner.dataset.state = 'nogo';
@@ -1011,14 +1152,15 @@ function updateGNGBanner(kiteReady, windOk, gustsOk, tideOk, speedKt, gustsKt, t
     if (!windOk)  reasons.push(`Wind ${speedKt} kt (need ${minWindKt}+)`);
     if (!gustsOk) reasons.push(`Gusts ${gustsKt} kt (max ${maxGustsKt})`);
     if (!tideOk)  reasons.push(`Tide ${tideLabelVal} (max ${maxTideM}m)`);
-    verdict.textContent = 'NO-GO';
+    verdict.textContent = 'GYM';
     reason.textContent  = reasons.join(' · ') || 'Conditions not met';
   }
 }
 
-function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk) {
+function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk, tideOk) {
   const badge = document.getElementById('goBadge');
   const label = document.getElementById('goLabel');
+  if (!badge || !label) return;
 
   if (!kiteReady) {
     badge.textContent = '—';
@@ -1027,7 +1169,7 @@ function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk
     return;
   }
 
-  if (windOk && gustsOk) {
+  if (windOk && gustsOk && tideOk) {
     badge.textContent = 'GO KITE';
     badge.className = 'go-badge go';
     label.textContent = `${speed} kt ${dir} · Gusts ${gusts} kt`;
@@ -1038,7 +1180,7 @@ function updateConditionsIndicator(speed, gusts, dir, kiteReady, windOk, gustsOk
   } else {
     badge.textContent = 'GYM DAY';
     badge.className = 'go-badge nogo';
-    label.textContent = `Wind ${speed} kt — need ${STATE.settings.minWindKt}+ kt`;
+    label.textContent = tideOk === false ? 'Tide above the kite threshold' : `Wind ${speed} kt — need ${STATE.settings.minWindKt}+ kt`;
   }
 }
 
@@ -1073,14 +1215,14 @@ function updateNudge() {
     if (kiteGo) tags.push({ text: '🪁 Wind is good', color: 'success' });
   } else if (hour >= 9 && hour < 12) {
     if (kiteGo && s.kiteStatus === 'ready') {
-      ic = '🪁'; msg = 'Wind is good and kites are ready. Get to the beach!';
-      tags.push({ text: 'GO KITE', color: 'go' });
+      ic = '🪁'; msg = 'Banner says KITE. Wind, gusts, tide, and kite status are aligned.';
+      tags.push({ text: 'KITE', color: 'go' });
     } else if (s.kiteStatus === 'repair') {
-      ic = '🏋️'; msg = 'Kites still in repair → Gym day. Make it count.';
-      tags.push({ text: 'GYM DAY', color: 'warning' });
+      ic = '🏋️'; msg = 'Banner says GYM. Kites are still marked in repair.';
+      tags.push({ text: 'GYM', color: 'warning' });
     } else {
-      ic = '🏋️'; msg = 'Not enough wind for kiting today → Gym day. Make it count.';
-      tags.push({ text: 'GYM DAY', color: 'warning' });
+      ic = '🏋️'; msg = 'Banner says GYM. Conditions are below the kite rule set.';
+      tags.push({ text: 'GYM', color: 'warning' });
     }
     if (s.shoulderDaysLeft > 0) {
       tags.push({ text: `Shoulder: ${s.shoulderDaysLeft}d left`, color: 'warning' });
@@ -1127,7 +1269,7 @@ function initSettings() {
     // Populate
     document.getElementById('settingsLat').value = STATE.settings.lat;
     document.getElementById('settingsLon').value = STATE.settings.lon;
-    document.getElementById('settingsMinWind').value = STATE.settings.minWind;
+    document.getElementById('settingsMinWind').value = STATE.settings.minWindKt;
     document.getElementById('settingsShoulderDays').value = STATE.settings.shoulderDaysLeft;
     document.getElementById('settingsKiteStatus').value = STATE.settings.kiteStatus;
     overlay.style.display = 'flex';
@@ -1142,8 +1284,12 @@ function initSettings() {
   save.addEventListener('click', () => {
     STATE.settings.lat = parseFloat(document.getElementById('settingsLat').value) || -7.115;
     STATE.settings.lon = parseFloat(document.getElementById('settingsLon').value) || -34.863;
-    STATE.settings.minWind = parseInt(document.getElementById('settingsMinWind').value) || 18;
+    STATE.settings.minWindKt = parseFloat(document.getElementById('settingsMinWind').value) || 10;
     STATE.settings.shoulderDaysLeft = parseInt(document.getElementById('settingsShoulderDays').value) || 0;
+    STATE.settings.shoulderTotalDays = Math.max(STATE.settings.shoulderTotalDays || 0, STATE.settings.shoulderDaysLeft);
+    STATE.settings.shoulderTargetDate = STATE.settings.shoulderDaysLeft > 0
+      ? addLocalDays(localDateKey(), STATE.settings.shoulderDaysLeft)
+      : null;
     STATE.settings.kiteStatus = document.getElementById('settingsKiteStatus').value;
 
     // Sync blockers
@@ -1155,7 +1301,8 @@ function initSettings() {
     renderBlockers();
     renderHabits();
     updateKiteStatus();
-    fetchWeather();
+    fetchConditions();
+    fetch48hWind();
     updateNudge();
   });
 }
